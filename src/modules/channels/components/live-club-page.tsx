@@ -1442,7 +1442,8 @@ function EventWorkflowCard({
           <div className="rounded-[18px] border border-hairline bg-surface/55 p-4">
             <p className="text-[13px] font-medium text-parchment">Verify QR or code</p>
             <p className="mt-1 text-[12px] leading-6 text-tan">
-              Paste the QR payload or ticket code to confirm it belongs to this event.
+              Scanning the QR now checks in automatically. Paste the QR link or ticket
+              code here only as a fallback.
             </p>
             <textarea
               value={verificationValue}

@@ -283,6 +283,27 @@ export const channelsApi = {
       checkedInByName: string | null
     }
   >("chat:verifyClubTicket"),
+  scanClubTicketAndCheckIn: mutationRef<
+    {
+      workspaceSlug: string
+      slug: string
+      eventId: string
+      ticketId: string
+      code: string
+    },
+    {
+      valid: boolean
+      canCheckIn: boolean
+      status: "pending" | "approved" | "rejected" | "invalid"
+      message: string
+      ticketId: string | null
+      attendeeName: string | null
+      attendeeEmail: string | null
+      code: string | null
+      checkedInAt: number | null
+      checkedInByName: string | null
+    }
+  >("chat:scanClubTicketAndCheckIn"),
   checkInClubTicket: mutationRef<
     {
       workspaceSlug: string

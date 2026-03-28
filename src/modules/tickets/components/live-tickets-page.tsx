@@ -156,8 +156,8 @@ function LiveTicketsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                   <div className="rounded-[18px] border border-hairline bg-surface/55 p-4">
                     <p className="text-[12px] font-medium text-parchment">Entry pass</p>
                     <p className="mt-2 text-[13px] leading-6 text-tan">
-                      Present this QR at the venue for verification. The pass stays valid
-                      until staff checks you in.
+                      When an admin scans this QR on any signed-in device, the ticket is
+                      verified and checked in automatically.
                     </p>
                   </div>
                   <TicketQr

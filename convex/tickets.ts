@@ -36,14 +36,15 @@ function buildClubTicketQrValue({
   ticketId: string
   code: string
 }) {
-  return JSON.stringify({
-    type: "campushive-club-ticket",
+  const params = new URLSearchParams({
     workspaceSlug,
     clubSlug,
     eventId,
     ticketId,
     code,
   })
+
+  return `/verify/ticket?${params.toString()}`
 }
 
 export const viewerTickets = queryGeneric({

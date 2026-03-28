@@ -905,14 +905,15 @@ function buildClubTicketQrValue({
   ticketId: string
   code: string
 }) {
-  return JSON.stringify({
-    type: "campushive-club-ticket",
+  const params = new URLSearchParams({
     workspaceSlug,
     clubSlug,
     eventId,
     ticketId,
     code,
   })
+
+  return `/verify/ticket?${params.toString()}`
 }
 
 async function generateUniqueTicketCode(
@@ -1040,12 +1041,154 @@ function parseTicketVerificationInput(value: string) {
     // Fall through to raw-code verification.
   }
 
+  try {
+    const candidate = normalized.startsWith("http://") ||
+      normalized.startsWith("https://") ||
+      normalized.startsWith("/")
+      ? new URL(normalized, "https://campushive.local")
+      : null
+
+    if (candidate) {
+      const ticketId = candidate.searchParams.get("ticketId")
+      const code = candidate.searchParams.get("code")
+
+      if (ticketId && code) {
+        return {
+          ticketId,
+          code,
+          eventId: candidate.searchParams.get("eventId"),
+          workspaceSlug: candidate.searchParams.get("workspaceSlug"),
+          clubSlug: candidate.searchParams.get("clubSlug"),
+        }
+      }
+    }
+  } catch {
+    // Fall through to raw-code verification.
+  }
+
   return {
     ticketId: null,
     code: normalized,
     eventId: null,
     workspaceSlug: null,
     clubSlug: null,
+  }
+}
+
+function invalidClubTicketVerificationResult(message: string) {
+  return {
+    valid: false,
+    canCheckIn: false,
+    status: "invalid" as const,
+    message,
+    ticketId: null,
+    attendeeName: null,
+    attendeeEmail: null,
+    code: null,
+    checkedInAt: null,
+    checkedInByName: null,
+  }
+}
+
+async function resolveClubTicketVerification(
+  ctx: ReadCtx | MutationCtx,
+  {
+    workspace,
+    convo,
+    event,
+    parsed,
+  }: {
+    workspace: Doc<"workspaces">
+    convo: Doc<"conversations">
+    event: Doc<"clubEvents">
+    parsed: {
+      ticketId: string | null
+      code: string
+      eventId: string | null
+      workspaceSlug: string | null
+      clubSlug: string | null
+    }
+  }
+) {
+  if (parsed.workspaceSlug && parsed.workspaceSlug !== workspace.slug) {
+    return {
+      ticket: null,
+      result: invalidClubTicketVerificationResult(
+        "This QR belongs to another workspace."
+      ),
+    }
+  }
+
+  if (parsed.clubSlug && parsed.clubSlug !== convo.slug) {
+    return {
+      ticket: null,
+      result: invalidClubTicketVerificationResult("This QR belongs to another club."),
+    }
+  }
+
+  if (parsed.eventId && parsed.eventId !== String(event._id)) {
+    return {
+      ticket: null,
+      result: invalidClubTicketVerificationResult("This QR belongs to another event."),
+    }
+  }
+
+  const ticketFromId = parsed.ticketId
+    ? await ctx.db.get(parsed.ticketId as Id<"clubEventTickets">)
+    : null
+  const ticket =
+    ticketFromId ??
+    (await ctx.db
+      .query("clubEventTickets")
+      .withIndex("by_workspace_and_code", (q) =>
+        q.eq("workspaceId", workspace._id).eq("code", parsed.code)
+      )
+      .unique())
+
+  if (
+    !ticket ||
+    ticket.workspaceId !== workspace._id ||
+    ticket.conversationId !== convo._id ||
+    ticket.eventId !== event._id ||
+    ticket.code !== parsed.code
+  ) {
+    return {
+      ticket: null,
+      result: invalidClubTicketVerificationResult("Ticket could not be verified."),
+    }
+  }
+
+  const [user, checkedInByUser] = await Promise.all([
+    ctx.db.get(ticket.userId),
+    ticket.checkedInByUserId
+      ? ctx.db.get(ticket.checkedInByUserId)
+      : Promise.resolve(null),
+  ])
+  const status = resolveClubEventTicketStatus(ticket)
+  const valid = status === "approved"
+  const canCheckIn = valid && !ticket.checkedInAt
+
+  return {
+    ticket,
+    result: {
+      valid,
+      canCheckIn,
+      status,
+      message:
+        status === "pending"
+          ? "This registration is still pending approval."
+          : status === "rejected"
+            ? "This ticket request was rejected."
+            : ticket.checkedInAt
+              ? "Ticket is valid but has already been checked in."
+              : "Ticket verified and ready for check-in.",
+      ticketId: String(ticket._id),
+      attendeeName: getDisplayNameFromUser(user),
+      attendeeEmail: user?.email ?? null,
+      code: ticket.code ?? null,
+      checkedInAt: ticket.checkedInAt ?? null,
+      checkedInByName: checkedInByUser?.name ?? null,
+    },
   }
 }
 
@@ -2263,114 +2406,77 @@ export const verifyClubTicket = mutationGeneric({
       throw new Error("This event does not belong to the selected club.")
     }
 
-    const parsed = parseTicketVerificationInput(args.value)
+    const { result } = await resolveClubTicketVerification(ctx, {
+      workspace,
+      convo,
+      event,
+      parsed: parseTicketVerificationInput(args.value),
+    })
 
-    if (parsed.workspaceSlug && parsed.workspaceSlug !== workspace.slug) {
-      return {
-        valid: false,
-        canCheckIn: false,
-        status: "invalid" as const,
-        message: "This QR belongs to another workspace.",
-        ticketId: null,
-        attendeeName: null,
-        attendeeEmail: null,
-        code: null,
-        checkedInAt: null,
-        checkedInByName: null,
-      }
+    return result
+  },
+})
+
+export const scanClubTicketAndCheckIn = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    eventId: v.id("clubEvents"),
+    ticketId: v.id("clubEventTickets"),
+    code: v.string(),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
     }
 
-    if (parsed.clubSlug && parsed.clubSlug !== convo.slug) {
-      return {
-        valid: false,
-        canCheckIn: false,
-        status: "invalid" as const,
-        message: "This QR belongs to another club.",
-        ticketId: null,
-        attendeeName: null,
-        attendeeEmail: null,
-        code: null,
-        checkedInAt: null,
-        checkedInByName: null,
-      }
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
     }
 
-    if (parsed.eventId && parsed.eventId !== String(event._id)) {
-      return {
-        valid: false,
-        canCheckIn: false,
-        status: "invalid" as const,
-        message: "This QR belongs to another event.",
-        ticketId: null,
-        attendeeName: null,
-        attendeeEmail: null,
-        code: null,
-        checkedInAt: null,
-        checkedInByName: null,
-      }
+    const manager = await requireConversationManager(ctx, workspace, convo)
+    const event = await requireClubEvent(ctx, args.eventId)
+
+    if (event.workspaceId !== workspace._id || event.conversationId !== convo._id) {
+      throw new Error("This event does not belong to the selected club.")
     }
 
-    const ticketFromId = parsed.ticketId
-      ? await ctx.db.get(parsed.ticketId as Id<"clubEventTickets">)
-      : null
-    const ticket =
-      ticketFromId ??
-      (await ctx.db
-        .query("clubEventTickets")
-        .withIndex("by_workspace_and_code", (q) =>
-          q.eq("workspaceId", workspace._id).eq("code", parsed.code)
-        )
-        .unique())
+    const { ticket, result } = await resolveClubTicketVerification(ctx, {
+      workspace,
+      convo,
+      event,
+      parsed: {
+        workspaceSlug: workspace.slug,
+        clubSlug: convo.slug,
+        eventId: String(event._id),
+        ticketId: String(args.ticketId),
+        code: args.code.trim(),
+      },
+    })
 
-    if (
-      !ticket ||
-      ticket.workspaceId !== workspace._id ||
-      ticket.conversationId !== convo._id ||
-      ticket.eventId !== event._id ||
-      ticket.code !== parsed.code
-    ) {
-      return {
-        valid: false,
-        canCheckIn: false,
-        status: "invalid" as const,
-        message: "Ticket could not be verified.",
-        ticketId: null,
-        attendeeName: null,
-        attendeeEmail: null,
-        code: null,
-        checkedInAt: null,
-        checkedInByName: null,
-      }
+    if (!ticket || !result.valid || !result.canCheckIn) {
+      return result
     }
 
-    const [user, checkedInByUser] = await Promise.all([
-      ctx.db.get(ticket.userId),
-      ticket.checkedInByUserId
-        ? ctx.db.get(ticket.checkedInByUserId)
-        : Promise.resolve(null),
-    ])
-    const status = resolveClubEventTicketStatus(ticket)
-    const valid = status === "approved"
-    const canCheckIn = valid && !ticket.checkedInAt
+    const checkedInAt = Date.now()
+
+    await ctx.db.patch(ticket._id, {
+      checkedInAt,
+      checkedInByUserId: manager.user._id,
+    })
 
     return {
-      valid,
-      canCheckIn,
-      status,
-      message:
-        status === "pending"
-          ? "This registration is still pending approval."
-          : status === "rejected"
-            ? "This ticket request was rejected."
-            : ticket.checkedInAt
-              ? "Ticket is valid but has already been checked in."
-              : "Ticket verified and ready for check-in.",
-      ticketId: String(ticket._id),
-      attendeeName: getDisplayNameFromUser(user),
-      attendeeEmail: user?.email ?? null,
-      code: ticket.code ?? null,
-      checkedInAt: ticket.checkedInAt ?? null,
-      checkedInByName: checkedInByUser?.name ?? null,
+      ...result,
+      canCheckIn: false,
+      message: "Ticket checked in automatically.",
+      checkedInAt,
+      checkedInByName: manager.user.name,
     }
   },
 })

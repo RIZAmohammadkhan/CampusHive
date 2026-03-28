@@ -15,8 +15,12 @@ export function TicketQr({
 
   useEffect(() => {
     let active = true
+    const qrValue =
+      typeof window !== "undefined" && value.startsWith("/")
+        ? new URL(value, window.location.origin).toString()
+        : value
 
-    void QRCode.toDataURL(value, {
+    void QRCode.toDataURL(qrValue, {
       errorCorrectionLevel: "M",
       margin: 1,
       width: 280,
