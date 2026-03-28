@@ -8,6 +8,7 @@ import {
   useState,
   useTransition,
 } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -15,7 +16,6 @@ import {
   CheckCircle2Icon,
   CheckIcon,
   ClipboardListIcon,
-  HashIcon,
   MapPinIcon,
   MessageSquareTextIcon,
   PlusIcon,
@@ -150,7 +150,8 @@ function ClubHero({
   membershipSummary,
   memberCount,
   eventCount,
-  pollCount,
+  sectionCount,
+  actionSlot,
 }: {
   clubSlug: string
   name: string
@@ -164,7 +165,8 @@ function ClubHero({
   membershipSummary: string
   memberCount: number | null
   eventCount: number
-  pollCount: number
+  sectionCount: number
+  actionSlot?: ReactNode
 }) {
   return (
     <section className="do-surface overflow-hidden">
@@ -187,10 +189,13 @@ function ClubHero({
             <span>
               {memberCount !== null ? `${memberCount} members` : "Campus-wide"}
             </span>
+            <span>{sectionCount} channels</span>
             <span>{eventCount} events</span>
-            <span>{pollCount} polls</span>
             <span>{activityLabel}</span>
           </div>
+          {actionSlot ? (
+            <div className="mt-5 flex flex-wrap items-center gap-2">{actionSlot}</div>
+          ) : null}
         </div>
 
         <ClubViewTabs
@@ -641,93 +646,6 @@ function ChannelPollPanel({
   )
 }
 
-function MembershipPanel({
-  access,
-  canJoin,
-  canRequestToJoin,
-  canLeave,
-  canManage,
-  canEditRoles,
-  viewerMembershipState,
-  isPending,
-  pendingAction,
-  onJoin,
-  onRequest,
-  onLeave,
-}: {
-  access: "public" | "members"
-  canJoin: boolean
-  canRequestToJoin: boolean
-  canLeave: boolean
-  canManage: boolean
-  canEditRoles: boolean
-  viewerMembershipState:
-    | "public"
-    | "admin"
-    | "owner"
-    | "officer"
-    | "member"
-    | "pending"
-    | "notMember"
-  isPending: boolean
-  pendingAction: string | null
-  onJoin: () => void
-  onRequest: () => void
-  onLeave: () => void
-}) {
-  return (
-    <section className="do-panel p-5">
-      <p className="do-eyebrow">Membership</p>
-      <h3 className="mt-2 text-[20px] font-medium text-cream">
-        {access === "public" ? "Open access" : "Membership"}
-      </h3>
-      <div className="mt-5 space-y-3 text-[13px] text-tan">
-        <div className="rounded-2xl border border-hairline bg-surface/55 p-4">
-          {access === "public"
-            ? "Anyone in the workspace can join."
-            : "Approval is required to join."}
-        </div>
-        {canManage ? (
-          <div className="rounded-2xl border border-hairline bg-surface/55 p-4">
-            <span className="inline-flex items-center gap-2 text-parchment">
-              <ShieldCheckIcon className="size-4 text-sage" />
-              {access === "members"
-                ? canEditRoles
-                  ? "You can review requests and manage roles."
-                  : "You can review requests and manage activity."
-                : "You can manage this club here."}
-            </span>
-          </div>
-        ) : null}
-        {canJoin ? (
-          <ActionButton
-            label="Join club"
-            disabled={isPending && pendingAction === "join-open-club"}
-            onClick={onJoin}
-          />
-        ) : canRequestToJoin ? (
-          <ActionButton
-            label="Request to join"
-            disabled={isPending && pendingAction === "request-to-join"}
-            onClick={onRequest}
-          />
-        ) : null}
-        {canLeave ? (
-          <ActionButton
-            label="Leave club"
-            variant="outline"
-            disabled={isPending && pendingAction === "leave-channel"}
-            onClick={onLeave}
-          />
-        ) : null}
-        {viewerMembershipState === "pending" ? (
-          <span className="do-pill">Join request pending</span>
-        ) : null}
-      </div>
-    </section>
-  )
-}
-
 function MembersPanel({
   workspaceSlug,
   members,
@@ -787,9 +705,15 @@ function MembersPanel({
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="do-eyebrow">Members</p>
-          <h3 className="mt-2 text-[20px] font-medium text-cream">Enrolled roster</h3>
+          <h3 className="mt-2 text-[20px] font-medium text-cream">Member roster</h3>
+          <p className="mt-2 text-[12px] leading-6 text-tan">
+            Search the club list and manage roles without the duplicate labels.
+          </p>
         </div>
-        <span className="do-pill">{filteredMembers.length}</span>
+        <span className="do-pill">
+          {filteredMembers.length}
+          {filteredMembers.length !== members.length ? ` / ${members.length}` : ""}
+        </span>
       </div>
       <div className="relative mt-5">
         <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tan" />
@@ -804,20 +728,20 @@ function MembersPanel({
         {filteredMembers.length ? (
           filteredMembers.map((member) => (
             <div key={member.id} className="do-card p-4">
-              <div className="flex items-start gap-3">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <Link
                   href={workspacePersonPath(workspaceSlug, member.id)}
                   className="flex min-w-0 flex-1 items-start gap-3 text-left"
                 >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[12px] text-cream">
-                    {member.name.charAt(0)}
-                  </span>
+                  <MemberAvatar name={member.name} imageUrl={member.imageUrl} />
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-[14px] font-medium text-cream">
                         {member.name}
                       </span>
-                      <span className="do-pill">{clubRoleLabel(member.role)}</span>
+                      {!canManage || access !== "members" || !canEditRoles ? (
+                        <span className="do-pill">{clubRoleLabel(member.role)}</span>
+                      ) : null}
                       {member.isCurrentUser ? <span className="do-pill">You</span> : null}
                     </span>
                     <span className="mt-1 block text-[12px] leading-6 text-tan">
@@ -826,7 +750,7 @@ function MembersPanel({
                   </span>
                 </Link>
                 {canManage && access === "members" ? (
-                  <div className="flex min-w-[148px] flex-col gap-2">
+                  <div className="flex min-w-[168px] flex-col gap-2 lg:items-stretch">
                     {canEditRoles ? (
                       <select
                         value={member.role}
@@ -851,26 +775,28 @@ function MembersPanel({
                         <option value="member">Member</option>
                       </select>
                     ) : null}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={isPending && pendingAction === `remove-${member.id}`}
-                      onClick={() =>
-                        runAction(
-                          `remove-${member.id}`,
-                          () =>
-                            removeMember({
-                              workspaceSlug,
-                              slug: clubSlug,
-                              userId: member.id,
-                            }),
-                          "Member removed"
-                        )
-                      }
-                    >
-                      <UserMinusIcon className="size-4" />
-                      Remove
-                    </Button>
+                    {!member.isCurrentUser ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isPending && pendingAction === `remove-${member.id}`}
+                        onClick={() =>
+                          runAction(
+                            `remove-${member.id}`,
+                            () =>
+                              removeMember({
+                                workspaceSlug,
+                                slug: clubSlug,
+                                userId: member.id,
+                              }),
+                            "Member removed"
+                          )
+                        }
+                      >
+                        <UserMinusIcon className="size-4" />
+                        Remove
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -883,6 +809,34 @@ function MembersPanel({
         )}
       </div>
     </section>
+  )
+}
+
+function MemberAvatar({
+  name,
+  imageUrl,
+}: {
+  name: string
+  imageUrl: string | null
+}) {
+  if (imageUrl) {
+    return (
+      <span className="relative size-10 shrink-0 overflow-hidden rounded-full border border-hairline bg-panel/80">
+        <Image
+          src={imageUrl}
+          alt={name}
+          fill
+          sizes="40px"
+          className="object-cover"
+        />
+      </span>
+    )
+  }
+
+  return (
+    <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[12px] uppercase text-cream">
+      {name.charAt(0)}
+    </span>
   )
 }
 
@@ -1232,22 +1186,22 @@ function EventWorkflowCard({
         <div className="flex shrink-0 flex-col items-start gap-2">
           {event.viewerTicket ? (
             <>
-              <span className="do-pill">Ticket approved</span>
+              <span className="do-pill">Pass ready</span>
               <Link
                 href={workspaceTicketsPath(workspaceSlug)}
                 className={buttonVariants({ variant: "outline", size: "sm" })}
               >
-                View ticket
+                Open pass
               </Link>
             </>
           ) : event.viewerRequestStatus === "pending" ? (
             <>
-              <span className="do-pill">Request pending</span>
+              <span className="do-pill">Approval pending</span>
               <Link
                 href={workspaceTicketsPath(workspaceSlug)}
                 className={buttonVariants({ variant: "outline", size: "sm" })}
               >
-                Open tickets
+                Track request
               </Link>
             </>
           ) : event.status === "open" && canParticipate ? (
@@ -1281,7 +1235,7 @@ function EventWorkflowCard({
               size="sm"
               onClick={() => setShowAdminTools((current) => !current)}
             >
-              {showAdminTools ? "Hide ticketing" : "Manage ticketing"}
+              {showAdminTools ? "Close review" : "Review tickets"}
             </Button>
           ) : null}
         </div>
@@ -1295,7 +1249,7 @@ function EventWorkflowCard({
                 <div>
                   <p className="text-[13px] font-medium text-parchment">Pending requests</p>
                   <p className="mt-1 text-[12px] leading-6 text-tan">
-                    Approve one by one, in bulk, or all at once.
+                    Approve individually or clear the queue in bulk.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -1428,7 +1382,7 @@ function EventWorkflowCard({
               <div>
                 <p className="text-[13px] font-medium text-parchment">Issue tickets</p>
                 <p className="mt-1 text-[12px] leading-6 text-tan">
-                  Select members, issue to a few, or issue to everyone in the club.
+                  Send passes directly to members without waiting for a request.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1517,8 +1471,8 @@ function EventWorkflowCard({
           <div className="rounded-[18px] border border-hairline bg-surface/55 p-4">
             <p className="text-[13px] font-medium text-parchment">Verify QR or code</p>
             <p className="mt-1 text-[12px] leading-6 text-tan">
-              Scanning the QR now checks in automatically. Paste the QR link or ticket
-              code here only as a fallback.
+              Scanning checks people in automatically. Paste a link or code only if the
+              scanner is not available.
             </p>
             <textarea
               value={verificationValue}
@@ -1611,7 +1565,7 @@ function EventWorkflowCard({
 
           {event.attendees.length ? (
             <div className="rounded-[18px] border border-hairline bg-surface/55 p-4">
-              <p className="text-[13px] font-medium text-parchment">Approved attendees</p>
+              <p className="text-[13px] font-medium text-parchment">Ready to enter</p>
               <div className="mt-4 space-y-3">
                 {event.attendees.map((attendee) => (
                   <div
@@ -1918,6 +1872,18 @@ function LiveClubPageInner({
   const accessLabel = access === "public" ? "Open club" : "Approval required"
   const membershipSummary = membershipLabel(viewerMembershipState)
   const showPollPanel = clubOps.polls.length > 0
+  const totalIssuedTickets = clubOps.events.reduce(
+    (sum, event) => sum + event.ticketCount,
+    0
+  )
+  const totalPendingTicketRequests = clubOps.events.reduce(
+    (sum, event) => sum + event.pendingRequestCount,
+    0
+  )
+  const totalCheckedInTickets = clubOps.events.reduce(
+    (sum, event) => sum + event.checkedInCount,
+    0
+  )
 
   const runAction: ActionRunner = (
     key,
@@ -2150,39 +2116,6 @@ function LiveClubPageInner({
 
   const membershipSidebar = (
     <>
-      <MembershipPanel
-        access={access}
-        canJoin={canJoin}
-        canRequestToJoin={canRequestToJoin}
-        canLeave={canLeave}
-        canManage={conversation.canManage}
-        canEditRoles={canEditRoles}
-        viewerMembershipState={viewerMembershipState}
-        isPending={isPending}
-        pendingAction={pendingAction}
-        onJoin={() =>
-          runAction(
-            "join-open-club",
-            () => joinOpenClub({ workspaceSlug, slug: clubSlug }),
-            "You joined the club"
-          )
-        }
-        onRequest={() =>
-          runAction(
-            "request-to-join",
-            () => requestToJoin({ workspaceSlug, slug: clubSlug }),
-            "Join request sent"
-          )
-        }
-        onLeave={() =>
-          runAction(
-            "leave-channel",
-            () => leaveChannel({ workspaceSlug, slug: clubSlug }),
-            "You left the club space"
-          )
-        }
-      />
-
       {!conversation.isGeneral ? (
         <MembersPanel
           workspaceSlug={workspaceSlug}
@@ -2239,7 +2172,7 @@ function LiveClubPageInner({
           onSubmit={handleCreateEvent}
         />
 
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="mx-auto w-full max-w-[960px] space-y-5 sm:space-y-6">
           <main className="space-y-5 sm:space-y-6">
             <ClubHero
               clubSlug={clubSlug}
@@ -2254,15 +2187,9 @@ function LiveClubPageInner({
               membershipSummary={membershipSummary}
               memberCount={memberCount}
               eventCount={clubOps.events.length}
-              pollCount={clubOps.polls.length}
-            />
-
-            {!canViewMessages ? (
-              <section className="do-card p-6">
-                <p className="text-[16px] font-medium text-cream">
-                  Join this club to unlock its discussion, events, and polls.
-                </p>
-                <div className="mt-5 flex flex-wrap gap-2">
+              sectionCount={discussionSections.length}
+              actionSlot={
+                <>
                   {canJoin ? (
                     <ActionButton
                       label="Join club"
@@ -2277,7 +2204,7 @@ function LiveClubPageInner({
                     />
                   ) : canRequestToJoin ? (
                     <ActionButton
-                      label="Request to join"
+                      label="Request access"
                       disabled={isPending && pendingAction === "request-to-join"}
                       onClick={() =>
                         runAction(
@@ -2287,61 +2214,56 @@ function LiveClubPageInner({
                         )
                       }
                     />
-                  ) : viewerMembershipState === "pending" ? (
-                    <span className="do-pill">Your request is waiting for review</span>
                   ) : null}
-                </div>
-              </section>
-            ) : null}
-
-            <section className="do-panel p-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="do-eyebrow">Discussion spaces</p>
-                  <h3 className="mt-2 text-[24px] font-medium text-cream">Club channels</h3>
-                  <p className="mt-2 text-[13px] leading-6 text-tan">
-                    Separate club info from live discussion and open the exact section you need.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                {discussionSections.map((section) => (
+                  {canLeave ? (
+                    <ActionButton
+                      label="Leave club"
+                      variant="outline"
+                      disabled={isPending && pendingAction === "leave-channel"}
+                      onClick={() =>
+                        runAction(
+                          "leave-channel",
+                          () => leaveChannel({ workspaceSlug, slug: clubSlug }),
+                          "You left the club space"
+                        )
+                      }
+                    />
+                  ) : null}
                   <Link
-                    key={section.slug}
-                    href={workspaceClubDiscussionPath(workspaceSlug, clubSlug, section.slug)}
-                    className="do-card block p-4"
+                    href={discussionHref}
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-tan">
-                            <HashIcon className="size-3.5" />
-                          </span>
-                          <p className="truncate text-[15px] font-medium text-cream">
-                            {section.name}
-                          </p>
-                        </div>
-                        <p className="mt-3 text-[12px] leading-6 text-tan">
-                          {section.description ?? "Club discussion"}
-                        </p>
-                      </div>
-                      <span className="do-pill shrink-0">{section.messageCount}</span>
-                    </div>
-                    <p className="mt-4 text-[11px] tracking-[0.12em] text-tan uppercase">
-                      Activity {formatRelativeActivity(section.lastMessageAt)}
-                    </p>
+                    Open discussion
                   </Link>
-                ))}
-              </div>
-            </section>
+                  {viewerMembershipState === "pending" ? (
+                    <span className="do-pill">Approval pending</span>
+                  ) : null}
+                  {conversation.canManage ? (
+                    <span className="do-pill do-pill-platinum">
+                      <ShieldCheckIcon className="size-3.5" />
+                      {access === "members"
+                        ? canEditRoles
+                          ? "Review requests and roles"
+                          : "Review requests"
+                        : "Manage this club"}
+                    </span>
+                  ) : null}
+                </>
+              }
+            />
 
             {clubOps.canParticipate ? (
               <section className="do-panel p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <p className="do-eyebrow">Events</p>
+                    <p className="do-eyebrow">Tickets</p>
                     <h3 className="mt-2 text-[24px] font-medium text-cream">Event ticketing</h3>
+                    <div className="mt-3 flex flex-wrap gap-2 text-[12px] text-tan">
+                      <span className="do-pill">{clubOps.events.length} events</span>
+                      <span className="do-pill">{totalIssuedTickets} issued</span>
+                      <span className="do-pill">{totalPendingTicketRequests} pending</span>
+                      <span className="do-pill">{totalCheckedInTickets} checked in</span>
+                    </div>
                   </div>
                   {clubOps.canManage ? (
                     <Button onClick={() => setIsEventComposerOpen(true)}>
@@ -2349,7 +2271,7 @@ function LiveClubPageInner({
                       Add event
                     </Button>
                   ) : (
-                    <span className="do-pill">Register and track approvals from Tickets</span>
+                    <span className="do-pill">Requests and passes stay synced in Tickets</span>
                   )}
                 </div>
 
@@ -2374,32 +2296,9 @@ function LiveClubPageInner({
                 </div>
               </section>
             ) : null}
-
-            <section className="do-panel p-5">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="do-eyebrow">Polls</p>
-                  <h3 className="mt-2 text-[20px] font-medium text-cream">
-                    Use polls in channels
-                  </h3>
-                  <p className="mt-2 text-[13px] leading-6 text-tan">
-                    Open a discussion section to create and vote on polls in context.
-                  </p>
-                </div>
-                <Link
-                  href={discussionHref}
-                  className={cn(
-                    buttonVariants({ variant: "outline", size: "sm" }),
-                    "w-full justify-center sm:w-fit"
-                  )}
-                >
-                  Open discussion
-                </Link>
-              </div>
-            </section>
           </main>
 
-          <aside className="space-y-4 lg:sticky lg:top-[5.5rem]">{membershipSidebar}</aside>
+          <section className="space-y-4">{membershipSidebar}</section>
         </div>
       </>
     )

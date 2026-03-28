@@ -10,7 +10,10 @@ import { Button } from "@/components/ui/button"
 import { WORKSPACE_HOME_PATTERN } from "@/lib/workspaces"
 import { workspaceApi } from "@/modules/workspace/api"
 import { NotificationCenter } from "@/modules/workspace/components/notification-center"
-import { getWorkspaceSection } from "@/modules/workspace/sections"
+import {
+  getWorkspaceScopedPath,
+  getWorkspaceSection,
+} from "@/modules/workspace/sections"
 
 type AppTopbarProps = {
   workspaceSlug: string
@@ -30,10 +33,17 @@ export function AppTopbar({
   const viewer = useQuery(workspaceApi.viewer, queryArgs)
   const section =
     getWorkspaceSection(pathname, workspaceSlug) ?? {
+      id: "workspace",
       title: "Workspace",
       subtitle: "Live campus data.",
       navLabel: "Workspace",
     }
+  const scopedPath = getWorkspaceScopedPath(pathname, workspaceSlug)
+  const compactSectionHeader =
+    section.id === "channels" && scopedPath.startsWith("/channels/")
+  const showSectionLabel =
+    !compactSectionHeader &&
+    section.navLabel.trim().toLowerCase() !== section.title.trim().toLowerCase()
   const { organization } = useOrganization()
   const roleLabel =
     viewer?.role === "admin"
@@ -62,11 +72,15 @@ export function AppTopbar({
                 </Button>
               ) : null}
               <div className="min-w-0">
-                <p className="do-eyebrow">{section.navLabel}</p>
+                {showSectionLabel ? (
+                  <p className="do-eyebrow">{section.navLabel}</p>
+                ) : null}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <h1 className="truncate text-[24px] font-light tracking-[-0.05em] text-parchment sm:text-[28px]">
-                    {section.title}
-                  </h1>
+                  {!compactSectionHeader ? (
+                    <h1 className="truncate text-[24px] font-light tracking-[-0.05em] text-parchment sm:text-[28px]">
+                      {section.title}
+                    </h1>
+                  ) : null}
                   <span className="do-pill do-pill-gold">
                     {organization?.slug ?? workspaceSlug}
                   </span>
@@ -75,9 +89,11 @@ export function AppTopbar({
                     {roleLabel}
                   </span>
                 </div>
-                <p className="mt-2 max-w-3xl text-[13px] leading-6 text-tan">
-                  {section.subtitle}
-                </p>
+                {!compactSectionHeader ? (
+                  <p className="mt-2 max-w-3xl text-[13px] leading-6 text-tan">
+                    {section.subtitle}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
