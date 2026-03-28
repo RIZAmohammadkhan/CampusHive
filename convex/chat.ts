@@ -18,6 +18,8 @@ type ChannelAccess = "public" | "members"
 type ClubRole = "owner" | "officer" | "member"
 type MembershipState = "public" | "admin" | "owner" | "officer" | "member" | "pending" | "notMember"
 type SectionReplyAccessMode = "everyone" | "selected"
+type ClubEventTicketStatus = "pending" | "approved" | "rejected"
+type ClubEventTicketSource = "admin" | "request"
 const liveStatus = v.union(v.literal("open"), v.literal("closed"))
 const ticketCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const campusFeedDiscussionSection = {
@@ -837,6 +839,82 @@ async function requireClubPoll(
   return poll
 }
 
+function resolveClubEventTicketStatus(
+  ticket: Doc<"clubEventTickets">
+): ClubEventTicketStatus {
+  return ticket.status ?? "approved"
+}
+
+function isApprovedClubEventTicket(ticket: Doc<"clubEventTickets">) {
+  return (
+    resolveClubEventTicketStatus(ticket) === "approved" &&
+    typeof ticket.code === "string" &&
+    ticket.code.length > 0
+  )
+}
+
+function getApprovedClubEventCount(tickets: Array<Doc<"clubEventTickets">>) {
+  return tickets.filter((ticket) => isApprovedClubEventTicket(ticket)).length
+}
+
+function getRemainingClubEventCapacity(
+  event: Doc<"clubEvents">,
+  tickets: Array<Doc<"clubEventTickets">>
+) {
+  if (typeof event.capacity !== "number") {
+    return null
+  }
+
+  return Math.max(event.capacity - getApprovedClubEventCount(tickets), 0)
+}
+
+function assertClubEventCapacity(
+  event: Doc<"clubEvents">,
+  approvedCount: number,
+  additionalCount = 1
+) {
+  if (typeof event.capacity !== "number") {
+    return
+  }
+
+  const remaining = event.capacity - approvedCount
+
+  if (remaining >= additionalCount) {
+    return
+  }
+
+  if (remaining > 0) {
+    throw new Error(
+      `Only ${remaining} seat${remaining === 1 ? "" : "s"} left for this event.`
+    )
+  }
+
+  throw new Error("This event has reached its capacity.")
+}
+
+function buildClubTicketQrValue({
+  workspaceSlug,
+  clubSlug,
+  eventId,
+  ticketId,
+  code,
+}: {
+  workspaceSlug: string
+  clubSlug: string
+  eventId: string
+  ticketId: string
+  code: string
+}) {
+  return JSON.stringify({
+    type: "campushive-club-ticket",
+    workspaceSlug,
+    clubSlug,
+    eventId,
+    ticketId,
+    code,
+  })
+}
+
 async function generateUniqueTicketCode(
   ctx: ReadCtx | MutationCtx,
   workspaceId: Id<"workspaces">
@@ -862,6 +940,113 @@ async function generateUniqueTicketCode(
   }
 
   throw new Error("Unable to generate a unique event ticket right now.")
+}
+
+async function approveClubEventTicketRecord(
+  ctx: MutationCtx,
+  {
+    workspaceId,
+    conversationId,
+    eventId,
+    userId,
+    actorUserId,
+    existingTicket,
+    source,
+  }: {
+    workspaceId: Id<"workspaces">
+    conversationId: Id<"conversations">
+    eventId: Id<"clubEvents">
+    userId: Id<"users">
+    actorUserId: Id<"users">
+    existingTicket: Doc<"clubEventTickets"> | null
+    source: ClubEventTicketSource
+  }
+) {
+  const now = Date.now()
+  const code = existingTicket?.code ?? (await generateUniqueTicketCode(ctx, workspaceId))
+
+  if (existingTicket) {
+    await ctx.db.patch(existingTicket._id, {
+      code,
+      status: "approved",
+      source: existingTicket.source ?? source,
+      updatedAt: now,
+      approvedAt: now,
+      approvedByUserId: actorUserId,
+      rejectedAt: undefined,
+      rejectedByUserId: undefined,
+      checkedInAt: undefined,
+      checkedInByUserId: undefined,
+    })
+
+    return {
+      ticketId: existingTicket._id,
+      code,
+    }
+  }
+
+  const ticketId = await ctx.db.insert("clubEventTickets", {
+    workspaceId,
+    conversationId,
+    eventId,
+    userId,
+    code,
+    status: "approved",
+    source,
+    createdAt: now,
+    updatedAt: now,
+    approvedAt: now,
+    approvedByUserId: actorUserId,
+  })
+
+  return {
+    ticketId,
+    code,
+  }
+}
+
+function parseTicketVerificationInput(value: string) {
+  const normalized = value.trim()
+
+  if (!normalized) {
+    throw new Error("Paste a ticket QR payload or ticket code to verify it.")
+  }
+
+  try {
+    const parsed = JSON.parse(normalized) as {
+      type?: string
+      workspaceSlug?: string
+      clubSlug?: string
+      eventId?: string
+      ticketId?: string
+      code?: string
+    }
+
+    if (
+      parsed.type === "campushive-club-ticket" &&
+      typeof parsed.ticketId === "string" &&
+      typeof parsed.code === "string"
+    ) {
+      return {
+        ticketId: parsed.ticketId,
+        code: parsed.code,
+        eventId: typeof parsed.eventId === "string" ? parsed.eventId : null,
+        workspaceSlug:
+          typeof parsed.workspaceSlug === "string" ? parsed.workspaceSlug : null,
+        clubSlug: typeof parsed.clubSlug === "string" ? parsed.clubSlug : null,
+      }
+    }
+  } catch {
+    // Fall through to raw-code verification.
+  }
+
+  return {
+    ticketId: null,
+    code: normalized,
+    eventId: null,
+    workspaceSlug: null,
+    clubSlug: null,
+  }
 }
 
 async function requireConversationManager(
@@ -1408,14 +1593,20 @@ export const clubOperations = queryGeneric({
             .withIndex("by_event_and_created_at", (q) => q.eq("eventId", event._id))
             .collect(),
         ])
-
+        const approvedTickets = tickets.filter((ticket) => isApprovedClubEventTicket(ticket))
+        const pendingTickets = tickets.filter(
+          (ticket) => resolveClubEventTicketStatus(ticket) === "pending"
+        )
         const viewerTicket = currentUser
           ? tickets.find((ticket) => ticket.userId === currentUser._id) ?? null
+          : null
+        const viewerRequestStatus = viewerTicket
+          ? resolveClubEventTicketStatus(viewerTicket)
           : null
         const attendees = canManage
           ? (
               await Promise.all(
-                tickets.map(async (ticket) => {
+                approvedTickets.map(async (ticket) => {
                   const [user, checkedInByUser] = await Promise.all([
                     ctx.db.get(ticket.userId),
                     ticket.checkedInByUserId
@@ -1428,8 +1619,9 @@ export const clubOperations = queryGeneric({
                     userId: String(ticket.userId),
                     name: getDisplayNameFromUser(user),
                     email: user?.email ?? null,
-                    code: ticket.code,
+                    code: ticket.code ?? "",
                     createdAt: ticket.createdAt,
+                    approvedAt: ticket.approvedAt ?? null,
                     checkedInAt: ticket.checkedInAt ?? null,
                     checkedInByName: checkedInByUser?.name ?? null,
                   }
@@ -1446,7 +1638,25 @@ export const clubOperations = queryGeneric({
               return left.name.localeCompare(right.name)
             })
           : []
-        const checkedInCount = tickets.filter((ticket) => ticket.checkedInAt).length
+        const pendingRequests = canManage
+          ? (
+              await Promise.all(
+                pendingTickets.map(async (ticket) => {
+                  const user = await ctx.db.get(ticket.userId)
+
+                  return {
+                    ticketId: String(ticket._id),
+                    userId: String(ticket.userId),
+                    name: getDisplayNameFromUser(user),
+                    email: user?.email ?? null,
+                    createdAt: ticket.createdAt,
+                  }
+                })
+              )
+            ).sort((left, right) => left.createdAt - right.createdAt)
+          : []
+        const checkedInCount = approvedTickets.filter((ticket) => ticket.checkedInAt).length
+        const remainingCapacity = getRemainingClubEventCapacity(event, tickets)
 
         return {
           id: String(event._id),
@@ -1455,36 +1665,42 @@ export const clubOperations = queryGeneric({
           date: event.date,
           time: event.time,
           location: event.location,
+          capacity: typeof event.capacity === "number" ? event.capacity : null,
+          remainingCapacity,
           status: event.status,
           createdAt: event.createdAt,
           createdByName: getDisplayNameFromUser(createdByUser),
-          ticketCount: tickets.length,
+          ticketCount: approvedTickets.length,
+          pendingRequestCount: pendingTickets.length,
           checkedInCount,
-          viewerTicket: viewerTicket
-            ? {
-                id: String(viewerTicket._id),
-                code: viewerTicket.code,
-                createdAt: viewerTicket.createdAt,
-                checkedInAt: viewerTicket.checkedInAt ?? null,
-                attendeeName: getDisplayNameFromUser(currentUser),
-                attendeeEmail: currentUser?.email ?? null,
-                organizationName: workspace.name,
-                clubName: convo.name,
-                eventTitle: event.title,
-                eventDate: event.date,
-                eventTime: event.time,
-                eventLocation: event.location,
-                qrValue: JSON.stringify({
-                  type: "campushive-club-ticket",
-                  workspaceSlug: workspace.slug,
-                  clubSlug: convo.slug,
-                  eventId: String(event._id),
-                  ticketId: String(viewerTicket._id),
-                  code: viewerTicket.code,
-                }),
-              }
-            : null,
+          viewerRequestStatus,
+          viewerTicket:
+            viewerTicket && isApprovedClubEventTicket(viewerTicket)
+              ? {
+                  id: String(viewerTicket._id),
+                  code: viewerTicket.code ?? "",
+                  createdAt: viewerTicket.createdAt,
+                  approvedAt: viewerTicket.approvedAt ?? null,
+                  checkedInAt: viewerTicket.checkedInAt ?? null,
+                  attendeeName: getDisplayNameFromUser(currentUser),
+                  attendeeEmail: currentUser?.email ?? null,
+                  organizationName: workspace.name,
+                  clubName: convo.name,
+                  eventTitle: event.title,
+                  eventDate: event.date,
+                  eventTime: event.time,
+                  eventLocation: event.location,
+                  qrValue: buildClubTicketQrValue({
+                    workspaceSlug: workspace.slug,
+                    clubSlug: convo.slug,
+                    eventId: String(event._id),
+                    ticketId: String(viewerTicket._id),
+                    code: viewerTicket.code ?? "",
+                  }),
+                }
+              : null,
           attendees,
+          pendingRequests,
         }
       })
     )
@@ -1579,6 +1795,7 @@ export const createClubEvent = mutationGeneric({
     date: v.string(),
     time: v.string(),
     location: v.string(),
+    capacity: v.optional(v.number()),
   },
   handler: async (ctx: MutationCtx, args) => {
     const identity = await requireIdentity(ctx)
@@ -1629,6 +1846,13 @@ export const createClubEvent = mutationGeneric({
       throw new Error("Event location must be between 2 and 80 characters.")
     }
 
+    if (
+      typeof args.capacity === "number" &&
+      (!Number.isInteger(args.capacity) || args.capacity < 1 || args.capacity > 5000)
+    ) {
+      throw new Error("Event capacity must be a whole number between 1 and 5000.")
+    }
+
     const eventId = await ctx.db.insert("clubEvents", {
       workspaceId: workspace._id,
       conversationId: convo._id,
@@ -1637,6 +1861,7 @@ export const createClubEvent = mutationGeneric({
       date: args.date,
       time,
       location,
+      capacity: args.capacity,
       status: "open",
       createdAt: Date.now(),
       createdByUserId: manager.user._id,
@@ -1702,6 +1927,10 @@ export const joinClubEvent = mutationGeneric({
       throw new Error("This event is no longer issuing tickets.")
     }
 
+    const eventTickets = await ctx.db
+      .query("clubEventTickets")
+      .withIndex("by_event_and_created_at", (q) => q.eq("eventId", event._id))
+      .collect()
     const existingTicket = await ctx.db
       .query("clubEventTickets")
       .withIndex("by_event_and_user", (q) =>
@@ -1710,25 +1939,438 @@ export const joinClubEvent = mutationGeneric({
       .unique()
 
     if (existingTicket) {
+      const status = resolveClubEventTicketStatus(existingTicket)
+
+      if (status === "approved") {
+        return {
+          ticketId: String(existingTicket._id),
+          code: existingTicket.code ?? "",
+        }
+      }
+
+      if (status === "pending") {
+        return {
+          ticketId: String(existingTicket._id),
+          code: "",
+        }
+      }
+
+      assertClubEventCapacity(event, getApprovedClubEventCount(eventTickets))
+      const now = Date.now()
+
+      await ctx.db.patch(existingTicket._id, {
+        code: undefined,
+        status: "pending",
+        source: "request",
+        createdAt: now,
+        updatedAt: now,
+        approvedAt: undefined,
+        approvedByUserId: undefined,
+        rejectedAt: undefined,
+        rejectedByUserId: undefined,
+        checkedInAt: undefined,
+        checkedInByUserId: undefined,
+      })
+
       return {
         ticketId: String(existingTicket._id),
-        code: existingTicket.code,
+        code: "",
       }
     }
 
-    const code = await generateUniqueTicketCode(ctx, workspace._id)
+    assertClubEventCapacity(event, getApprovedClubEventCount(eventTickets))
+    const now = Date.now()
     const ticketId = await ctx.db.insert("clubEventTickets", {
       workspaceId: workspace._id,
       conversationId: convo._id,
       eventId: event._id,
       userId: user._id,
-      code,
-      createdAt: Date.now(),
+      status: "pending",
+      source: "request",
+      createdAt: now,
+      updatedAt: now,
     })
 
     return {
       ticketId: String(ticketId),
-      code,
+      code: "",
+    }
+  },
+})
+
+export const issueClubTickets = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    eventId: v.id("clubEvents"),
+    userIds: v.array(v.id("users")),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    const manager = await requireConversationManager(ctx, workspace, convo)
+    const event = await requireClubEvent(ctx, args.eventId)
+
+    if (event.workspaceId !== workspace._id || event.conversationId !== convo._id) {
+      throw new Error("This event does not belong to the selected club.")
+    }
+
+    if (event.status !== "open") {
+      throw new Error("This event is no longer issuing tickets.")
+    }
+
+    const uniqueUserIds = Array.from(
+      new Map(args.userIds.map((userId) => [String(userId), userId])).values()
+    )
+
+    if (!uniqueUserIds.length) {
+      throw new Error("Select at least one club member.")
+    }
+
+    const memberships = await listConversationMembershipDocs(ctx, convo._id)
+    const memberUserIds = new Set(memberships.map((membership) => String(membership.userId)))
+
+    if (uniqueUserIds.some((userId) => !memberUserIds.has(String(userId)))) {
+      throw new Error("Tickets can only be issued to current club members.")
+    }
+
+    const eventTickets = await ctx.db
+      .query("clubEventTickets")
+      .withIndex("by_event_and_created_at", (q) => q.eq("eventId", event._id))
+      .collect()
+    const ticketsByUserId = new Map(
+      eventTickets.map((ticket) => [String(ticket.userId), ticket] as const)
+    )
+    const approvedCount = getApprovedClubEventCount(eventTickets)
+    const issueableUserIds = uniqueUserIds.filter((userId) => {
+      const existingTicket = ticketsByUserId.get(String(userId)) ?? null
+      return !existingTicket || !isApprovedClubEventTicket(existingTicket)
+    })
+
+    assertClubEventCapacity(event, approvedCount, issueableUserIds.length)
+
+    let issuedCount = 0
+    let skippedCount = 0
+    const notifiedUserIds: Array<Id<"users">> = []
+
+    for (const userId of uniqueUserIds) {
+      const existingTicket = ticketsByUserId.get(String(userId)) ?? null
+
+      if (existingTicket && isApprovedClubEventTicket(existingTicket)) {
+        skippedCount += 1
+        continue
+      }
+
+      await approveClubEventTicketRecord(ctx, {
+        workspaceId: workspace._id,
+        conversationId: convo._id,
+        eventId: event._id,
+        userId,
+        actorUserId: manager.user._id,
+        existingTicket,
+        source: "admin",
+      })
+
+      issuedCount += 1
+      notifiedUserIds.push(userId)
+    }
+
+    if (notifiedUserIds.length) {
+      await createNotifications(ctx, {
+        workspaceId: workspace._id,
+        recipientUserIds: notifiedUserIds,
+        kind: "clubEvent",
+        title: `Ticket issued for ${event.title}`,
+        body: `${event.date} · ${event.time} · ${event.location}`,
+        route: `/tickets`,
+        actorUserId: manager.user._id,
+        conversationId: convo._id,
+        eventId: event._id,
+      })
+    }
+
+    return {
+      issuedCount,
+      skippedCount,
+    }
+  },
+})
+
+export const reviewClubEventRequests = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    eventId: v.id("clubEvents"),
+    ticketIds: v.array(v.id("clubEventTickets")),
+    approve: v.boolean(),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    const manager = await requireConversationManager(ctx, workspace, convo)
+    const event = await requireClubEvent(ctx, args.eventId)
+
+    if (event.workspaceId !== workspace._id || event.conversationId !== convo._id) {
+      throw new Error("This event does not belong to the selected club.")
+    }
+
+    const uniqueTicketIds = Array.from(
+      new Map(args.ticketIds.map((ticketId) => [String(ticketId), ticketId])).values()
+    )
+
+    if (!uniqueTicketIds.length) {
+      throw new Error("Select at least one request.")
+    }
+
+    const selectedTickets = await Promise.all(uniqueTicketIds.map((ticketId) => ctx.db.get(ticketId)))
+
+    if (selectedTickets.some((ticket) => !ticket)) {
+      throw new Error("One or more ticket requests could not be found.")
+    }
+
+    const pendingTickets = selectedTickets
+      .filter((ticket): ticket is Doc<"clubEventTickets"> => Boolean(ticket))
+      .filter((ticket) => {
+        if (ticket.workspaceId !== workspace._id || ticket.conversationId !== convo._id) {
+          throw new Error("A selected request does not belong to this club.")
+        }
+
+        if (ticket.eventId !== event._id) {
+          throw new Error("A selected request does not belong to this event.")
+        }
+
+        return resolveClubEventTicketStatus(ticket) === "pending"
+      })
+
+    if (args.approve) {
+      const eventTickets = await ctx.db
+        .query("clubEventTickets")
+        .withIndex("by_event_and_created_at", (q) => q.eq("eventId", event._id))
+        .collect()
+      const approvedCount = getApprovedClubEventCount(eventTickets)
+
+      assertClubEventCapacity(event, approvedCount, pendingTickets.length)
+    }
+
+    let reviewedCount = 0
+    const skippedCount = uniqueTicketIds.length - pendingTickets.length
+    const notifiedUserIds: Array<Id<"users">> = []
+
+    for (const ticket of pendingTickets) {
+      if (args.approve) {
+        await approveClubEventTicketRecord(ctx, {
+          workspaceId: workspace._id,
+          conversationId: convo._id,
+          eventId: event._id,
+          userId: ticket.userId,
+          actorUserId: manager.user._id,
+          existingTicket: ticket,
+          source: ticket.source ?? "request",
+        })
+      } else {
+        const now = Date.now()
+
+        await ctx.db.patch(ticket._id, {
+          code: undefined,
+          status: "rejected",
+          updatedAt: now,
+          approvedAt: undefined,
+          approvedByUserId: undefined,
+          rejectedAt: now,
+          rejectedByUserId: manager.user._id,
+          checkedInAt: undefined,
+          checkedInByUserId: undefined,
+        })
+      }
+
+      reviewedCount += 1
+      notifiedUserIds.push(ticket.userId)
+    }
+
+    if (notifiedUserIds.length) {
+      await createNotifications(ctx, {
+        workspaceId: workspace._id,
+        recipientUserIds: notifiedUserIds,
+        kind: "clubEvent",
+        title: args.approve
+          ? `Ticket approved for ${event.title}`
+          : `Ticket request declined for ${event.title}`,
+        body: `${event.date} · ${event.time} · ${event.location}`,
+        route: `/tickets`,
+        actorUserId: manager.user._id,
+        conversationId: convo._id,
+        eventId: event._id,
+      })
+    }
+
+    return {
+      reviewedCount,
+      skippedCount,
+    }
+  },
+})
+
+export const verifyClubTicket = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    eventId: v.id("clubEvents"),
+    value: v.string(),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    await requireConversationManager(ctx, workspace, convo)
+    const event = await requireClubEvent(ctx, args.eventId)
+
+    if (event.workspaceId !== workspace._id || event.conversationId !== convo._id) {
+      throw new Error("This event does not belong to the selected club.")
+    }
+
+    const parsed = parseTicketVerificationInput(args.value)
+
+    if (parsed.workspaceSlug && parsed.workspaceSlug !== workspace.slug) {
+      return {
+        valid: false,
+        canCheckIn: false,
+        status: "invalid" as const,
+        message: "This QR belongs to another workspace.",
+        ticketId: null,
+        attendeeName: null,
+        attendeeEmail: null,
+        code: null,
+        checkedInAt: null,
+        checkedInByName: null,
+      }
+    }
+
+    if (parsed.clubSlug && parsed.clubSlug !== convo.slug) {
+      return {
+        valid: false,
+        canCheckIn: false,
+        status: "invalid" as const,
+        message: "This QR belongs to another club.",
+        ticketId: null,
+        attendeeName: null,
+        attendeeEmail: null,
+        code: null,
+        checkedInAt: null,
+        checkedInByName: null,
+      }
+    }
+
+    if (parsed.eventId && parsed.eventId !== String(event._id)) {
+      return {
+        valid: false,
+        canCheckIn: false,
+        status: "invalid" as const,
+        message: "This QR belongs to another event.",
+        ticketId: null,
+        attendeeName: null,
+        attendeeEmail: null,
+        code: null,
+        checkedInAt: null,
+        checkedInByName: null,
+      }
+    }
+
+    const ticketFromId = parsed.ticketId
+      ? await ctx.db.get(parsed.ticketId as Id<"clubEventTickets">)
+      : null
+    const ticket =
+      ticketFromId ??
+      (await ctx.db
+        .query("clubEventTickets")
+        .withIndex("by_workspace_and_code", (q) =>
+          q.eq("workspaceId", workspace._id).eq("code", parsed.code)
+        )
+        .unique())
+
+    if (
+      !ticket ||
+      ticket.workspaceId !== workspace._id ||
+      ticket.conversationId !== convo._id ||
+      ticket.eventId !== event._id ||
+      ticket.code !== parsed.code
+    ) {
+      return {
+        valid: false,
+        canCheckIn: false,
+        status: "invalid" as const,
+        message: "Ticket could not be verified.",
+        ticketId: null,
+        attendeeName: null,
+        attendeeEmail: null,
+        code: null,
+        checkedInAt: null,
+        checkedInByName: null,
+      }
+    }
+
+    const [user, checkedInByUser] = await Promise.all([
+      ctx.db.get(ticket.userId),
+      ticket.checkedInByUserId
+        ? ctx.db.get(ticket.checkedInByUserId)
+        : Promise.resolve(null),
+    ])
+    const status = resolveClubEventTicketStatus(ticket)
+    const valid = status === "approved"
+    const canCheckIn = valid && !ticket.checkedInAt
+
+    return {
+      valid,
+      canCheckIn,
+      status,
+      message:
+        status === "pending"
+          ? "This registration is still pending approval."
+          : status === "rejected"
+            ? "This ticket request was rejected."
+            : ticket.checkedInAt
+              ? "Ticket is valid but has already been checked in."
+              : "Ticket verified and ready for check-in.",
+      ticketId: String(ticket._id),
+      attendeeName: getDisplayNameFromUser(user),
+      attendeeEmail: user?.email ?? null,
+      code: ticket.code ?? null,
+      checkedInAt: ticket.checkedInAt ?? null,
+      checkedInByName: checkedInByUser?.name ?? null,
     }
   },
 })
@@ -1763,6 +2405,10 @@ export const checkInClubTicket = mutationGeneric({
 
     if (ticket.workspaceId !== workspace._id || ticket.conversationId !== convo._id) {
       throw new Error("This ticket does not belong to the selected club.")
+    }
+
+    if (!isApprovedClubEventTicket(ticket)) {
+      throw new Error("Only approved tickets can be checked in.")
     }
 
     if (ticket.checkedInAt) {

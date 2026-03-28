@@ -34,6 +34,10 @@ export function workspaceMessagesPath(workspaceSlug: string) {
   return workspacePath(workspaceSlug, "/messages")
 }
 
+export function workspaceTicketsPath(workspaceSlug: string) {
+  return workspacePath(workspaceSlug, "/tickets")
+}
+
 export function workspaceMessagePath(workspaceSlug: string, dmSlug: string) {
   return workspacePath(workspaceSlug, `/messages/${dmSlug}`)
 }

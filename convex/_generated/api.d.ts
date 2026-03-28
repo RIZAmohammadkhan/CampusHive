@@ -17,6 +17,7 @@ import type * as lib_workspaces from "../lib/workspaces.js";
 import type * as notifications from "../notifications.js";
 import type * as presence from "../presence.js";
 import type * as projects from "../projects.js";
+import type * as tickets from "../tickets.js";
 import type * as types from "../types.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   notifications: typeof notifications;
   presence: typeof presence;
   projects: typeof projects;
+  tickets: typeof tickets;
   types: typeof types;
   workspaces: typeof workspaces;
 }>;

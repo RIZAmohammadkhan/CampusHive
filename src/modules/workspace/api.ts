@@ -41,10 +41,12 @@ export type MemberProfileData = {
   }>
   eventTickets: Array<{
     id: string
-    code: string
+    code: string | null
+    status: "pending" | "approved" | "rejected"
     eventTitle: string
     clubName: string
     createdAt: number
+    approvedAt: number | null
     checkedInAt: number | null
   }>
 }

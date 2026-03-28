@@ -24,6 +24,12 @@ const taskStatus = v.union(
 )
 const taskKind = v.union(v.literal("assigned"), v.literal("volunteer"))
 const eventStatus = v.union(v.literal("open"), v.literal("closed"))
+const clubEventTicketStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("rejected")
+)
+const clubEventTicketSource = v.union(v.literal("admin"), v.literal("request"))
 const pollStatus = v.union(v.literal("open"), v.literal("closed"))
 const sectionReplyAccessMode = v.union(
   v.literal("everyone"),
@@ -220,6 +226,7 @@ export default defineSchema({
     date: v.string(),
     time: v.string(),
     location: v.string(),
+    capacity: v.optional(v.number()),
     status: eventStatus,
     createdAt: v.number(),
     createdByUserId: v.id("users"),
@@ -232,13 +239,21 @@ export default defineSchema({
     conversationId: v.id("conversations"),
     eventId: v.id("clubEvents"),
     userId: v.id("users"),
-    code: v.string(),
+    code: v.optional(v.string()),
+    status: v.optional(clubEventTicketStatus),
+    source: v.optional(clubEventTicketSource),
     createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+    approvedAt: v.optional(v.number()),
+    approvedByUserId: v.optional(v.id("users")),
+    rejectedAt: v.optional(v.number()),
+    rejectedByUserId: v.optional(v.id("users")),
     checkedInAt: v.optional(v.number()),
     checkedInByUserId: v.optional(v.id("users")),
   })
     .index("by_event_and_user", ["eventId", "userId"])
     .index("by_event_and_created_at", ["eventId", "createdAt"])
+    .index("by_event_and_status", ["eventId", "status"])
     .index("by_workspace_and_code", ["workspaceId", "code"])
     .index("by_user_and_created_at", ["userId", "createdAt"]),
 

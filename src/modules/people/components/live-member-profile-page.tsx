@@ -53,6 +53,25 @@ function formatLastSeen(timestamp: number | null, isActive: boolean) {
   return `Last seen ${Math.round(minutes / 1_440)} day ago`
 }
 
+function formatTicketStatus(ticket: {
+  status: "pending" | "approved" | "rejected"
+  checkedInAt: number | null
+}) {
+  if (ticket.checkedInAt) {
+    return "Checked in"
+  }
+
+  if (ticket.status === "pending") {
+    return "Pending approval"
+  }
+
+  if (ticket.status === "rejected") {
+    return "Rejected"
+  }
+
+  return "Issued"
+}
+
 export function LiveMemberProfilePage({
   workspaceSlug,
   userId,
@@ -271,13 +290,11 @@ function LiveMemberProfilePageInner({
                       <p className="text-[15px] font-medium text-cream">
                         {ticket.eventTitle}
                       </p>
-                      <span className="do-pill">{ticket.code}</span>
-                      <span className="do-pill">
-                        {ticket.checkedInAt ? "Checked in" : "Issued"}
-                      </span>
+                      {ticket.code ? <span className="do-pill">{ticket.code}</span> : null}
+                      <span className="do-pill">{formatTicketStatus(ticket)}</span>
                     </div>
                     <p className="mt-2 text-[12px] leading-6 text-tan">
-                      {ticket.clubName} · Created {formatShortDate(ticket.createdAt)}
+                      {ticket.clubName} · Requested {formatShortDate(ticket.createdAt)}
                     </p>
                   </div>
                 ))

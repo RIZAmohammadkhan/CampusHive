@@ -41,10 +41,12 @@ import {
   workspaceClubPath,
   workspaceClubsPath,
   workspacePersonPath,
+  workspaceTicketsPath,
 } from "@/lib/workspaces"
 import {
   channelsApi,
   type ClubOperationsData,
+  type ConversationData,
   type MessageData,
 } from "@/modules/channels/api"
 import {
@@ -56,7 +58,6 @@ import {
   membershipLabel,
 } from "@/modules/channels/components/conversation-utils"
 import { MinimalChatThread } from "@/modules/channels/components/minimal-chat-thread"
-import { TicketQr } from "@/modules/channels/components/ticket-qr"
 import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 
 const selectClassName =
@@ -167,55 +168,36 @@ function ClubHero({
 }) {
   return (
     <section className="do-surface overflow-hidden">
-      <div className="border-b border-hairline px-6 py-6">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="do-pill">Club workspace</span>
-              <span className="do-pill">
-                <MessageSquareTextIcon className="size-3.5" />
-                #{clubSlug}
-              </span>
-              <span className="do-pill">{category}</span>
-            </div>
-            <h1 className="mt-4 text-[30px] font-semibold tracking-tight text-cream">
-              {name}
-            </h1>
-            <p className="mt-3 max-w-3xl text-[14px] leading-7 text-tan">{description}</p>
+      <div className="flex flex-col gap-5 px-6 py-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="max-w-3xl">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="do-pill">{category}</span>
+            <span className="do-pill">{accessLabel}</span>
+            <span className="do-pill">
+              <MessageSquareTextIcon className="size-3.5" />
+              #{clubSlug}
+            </span>
           </div>
+          <h1 className="mt-4 text-[30px] font-semibold tracking-tight text-cream">
+            {name}
+          </h1>
+          <p className="mt-3 text-[14px] leading-7 text-tan">{description}</p>
+          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[12px] text-tan">
+            <span>{membershipSummary}</span>
+            <span>
+              {memberCount !== null ? `${memberCount} members` : "Campus-wide"}
+            </span>
+            <span>{eventCount} events</span>
+            <span>{pollCount} polls</span>
+            <span>{activityLabel}</span>
+          </div>
+        </div>
 
-          <ClubViewTabs
-            overviewHref={overviewHref}
-            discussionHref={discussionHref}
-            overviewActive={overviewActive}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-3 px-6 py-6 md:grid-cols-2 xl:grid-cols-5">
-        <div className="rounded-[20px] border border-hairline bg-surface/55 px-4 py-3">
-          <p className="text-[10px] tracking-[0.15em] text-tan uppercase">Access</p>
-          <p className="mt-2 text-[14px] font-medium text-cream">{accessLabel}</p>
-        </div>
-        <div className="rounded-[20px] border border-hairline bg-surface/55 px-4 py-3">
-          <p className="text-[10px] tracking-[0.15em] text-tan uppercase">Membership</p>
-          <p className="mt-2 text-[14px] font-medium text-cream">{membershipSummary}</p>
-        </div>
-        <div className="rounded-[20px] border border-hairline bg-surface/55 px-4 py-3">
-          <p className="text-[10px] tracking-[0.15em] text-tan uppercase">Members</p>
-          <p className="mt-2 text-[14px] font-medium text-cream">
-            {memberCount !== null ? memberCount : "Campus-wide"}
-          </p>
-        </div>
-        <div className="rounded-[20px] border border-hairline bg-surface/55 px-4 py-3">
-          <p className="text-[10px] tracking-[0.15em] text-tan uppercase">Events</p>
-          <p className="mt-2 text-[14px] font-medium text-cream">{eventCount}</p>
-        </div>
-        <div className="rounded-[20px] border border-hairline bg-surface/55 px-4 py-3">
-          <p className="text-[10px] tracking-[0.15em] text-tan uppercase">Activity</p>
-          <p className="mt-2 text-[14px] font-medium text-cream">{activityLabel}</p>
-          <p className="mt-1 text-[11px] text-tan">{pollCount} active decision spaces</p>
-        </div>
+        <ClubViewTabs
+          overviewHref={overviewHref}
+          discussionHref={discussionHref}
+          overviewActive={overviewActive}
+        />
       </div>
     </section>
   )
@@ -355,6 +337,144 @@ function PollComposerModal({
               >
                 <VoteIcon className="size-4" />
                 Publish poll
+              </Button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function ClubEventComposerModal({
+  open,
+  canManage,
+  title,
+  setTitle,
+  summary,
+  setSummary,
+  date,
+  setDate,
+  time,
+  setTime,
+  location,
+  setLocation,
+  capacity,
+  setCapacity,
+  isPending,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean
+  canManage: boolean
+  title: string
+  setTitle: (value: string) => void
+  summary: string
+  setSummary: (value: string) => void
+  date: string
+  setDate: (value: string) => void
+  time: string
+  setTime: (value: string) => void
+  location: string
+  setLocation: (value: string) => void
+  capacity: string
+  setCapacity: (value: string) => void
+  isPending: boolean
+  onClose: () => void
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  if (!open || !canManage) {
+    return null
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-4 backdrop-blur-sm md:items-center md:p-6"
+      onClick={onClose}
+    >
+      <div
+        className="do-surface w-full max-w-2xl p-6 md:p-7"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="do-eyebrow">New Event</p>
+            <h3 className="mt-2 do-subheading">Add club ticketing</h3>
+            <p className="mt-3 max-w-xl text-[13px] leading-6 text-tan">
+              Publish a club event, set an optional capacity, and keep ticket requests in
+              one place.
+            </p>
+          </div>
+          <Button variant="outline" size="icon-sm" onClick={onClose} disabled={isPending}>
+            <XIcon className="size-4" />
+          </Button>
+        </div>
+
+        <form onSubmit={onSubmit} className="mt-6 grid gap-3 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <Input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Event title"
+              disabled={isPending}
+              autoFocus
+            />
+          </div>
+          <div className="md:col-span-2">
+            <textarea
+              value={summary}
+              onChange={(event) => setSummary(event.target.value)}
+              placeholder="What is this event about?"
+              className={textareaClassName}
+              disabled={isPending}
+            />
+          </div>
+          <Input
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            disabled={isPending}
+          />
+          <Input
+            value={time}
+            onChange={(event) => setTime(event.target.value)}
+            placeholder="6:30 PM"
+            disabled={isPending}
+          />
+          <Input
+            value={location}
+            onChange={(event) => setLocation(event.target.value)}
+            placeholder="Main auditorium or meeting link"
+            disabled={isPending}
+          />
+          <Input
+            type="number"
+            min={1}
+            value={capacity}
+            onChange={(event) => setCapacity(event.target.value)}
+            placeholder="Capacity (optional)"
+            disabled={isPending}
+          />
+          <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-3 pt-2">
+            <p className="text-[12px] leading-6 text-tan">
+              Tickets will be managed from this club and also appear on the Events page.
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  isPending ||
+                  !title.trim() ||
+                  !date ||
+                  !time.trim() ||
+                  !location.trim()
+                }
+              >
+                <PlusIcon className="size-4" />
+                Publish event
               </Button>
             </div>
           </div>
@@ -870,6 +990,645 @@ function PendingRequestsPanel({
   )
 }
 
+type TicketVerificationResult = {
+  valid: boolean
+  canCheckIn: boolean
+  status: "pending" | "approved" | "rejected" | "invalid"
+  message: string
+  ticketId: string | null
+  attendeeName: string | null
+  attendeeEmail: string | null
+  code: string | null
+  checkedInAt: number | null
+  checkedInByName: string | null
+}
+
+function EventWorkflowCard({
+  workspaceSlug,
+  clubSlug,
+  event,
+  members,
+  canManage,
+  canParticipate,
+}: {
+  workspaceSlug: string
+  clubSlug: string
+  event: ClubOperationsData["events"][number]
+  members: ConversationData["members"]
+  canManage: boolean
+  canParticipate: boolean
+}) {
+  const requestClubTicket = useMutation(channelsApi.joinClubEvent)
+  const issueClubTickets = useMutation(channelsApi.issueClubTickets)
+  const reviewClubEventRequests = useMutation(channelsApi.reviewClubEventRequests)
+  const verifyClubTicket = useMutation(channelsApi.verifyClubTicket)
+  const checkInClubTicket = useMutation(channelsApi.checkInClubTicket)
+  const resetClubTicket = useMutation(channelsApi.resetClubTicket)
+  const [memberSearch, setMemberSearch] = useState("")
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
+  const [selectedRequestIds, setSelectedRequestIds] = useState<string[]>([])
+  const [verificationValue, setVerificationValue] = useState("")
+  const [verificationResult, setVerificationResult] =
+    useState<TicketVerificationResult | null>(null)
+  const [showAdminTools, setShowAdminTools] = useState(false)
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+  const deferredMemberSearch = useDeferredValue(memberSearch.trim().toLowerCase())
+  const approvedUserIds = new Set(event.attendees.map((attendee) => attendee.userId))
+  const pendingUserIds = new Set(
+    event.pendingRequests.map((request) => request.userId)
+  )
+  const filteredMembers = members.filter((member) => {
+    if (!deferredMemberSearch) {
+      return true
+    }
+
+    return `${member.name} ${member.role}`.toLowerCase().includes(deferredMemberSearch)
+  })
+
+  const runAction = (key: string, action: () => Promise<void>) => {
+    setPendingAction(key)
+
+    startTransition(async () => {
+      try {
+        await action()
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Action failed.")
+      } finally {
+        setPendingAction(null)
+      }
+    })
+  }
+
+  const toggleSelectedMember = (userId: string) => {
+    setSelectedMemberIds((current) =>
+      current.includes(userId)
+        ? current.filter((entry) => entry !== userId)
+        : [...current, userId]
+    )
+  }
+
+  const toggleSelectedRequest = (ticketId: string) => {
+    setSelectedRequestIds((current) =>
+      current.includes(ticketId)
+        ? current.filter((entry) => entry !== ticketId)
+        : [...current, ticketId]
+    )
+  }
+
+  const handleIssueTickets = (userIds: string[], key: string) => {
+    runAction(key, async () => {
+      const result = await issueClubTickets({
+        workspaceSlug,
+        slug: clubSlug,
+        eventId: event.id,
+        userIds,
+      })
+
+      setSelectedMemberIds([])
+
+      if (result.issuedCount > 0) {
+        toast.success(
+          result.skippedCount > 0
+            ? `${result.issuedCount} ticket${result.issuedCount === 1 ? "" : "s"} issued, ${result.skippedCount} skipped`
+            : `${result.issuedCount} ticket${result.issuedCount === 1 ? "" : "s"} issued`
+        )
+        return
+      }
+
+      toast.success("Selected members already have approved tickets.")
+    })
+  }
+
+  const handleReviewRequests = (
+    ticketIds: string[],
+    approve: boolean,
+    key: string
+  ) => {
+    runAction(key, async () => {
+      const result = await reviewClubEventRequests({
+        workspaceSlug,
+        slug: clubSlug,
+        eventId: event.id,
+        ticketIds,
+        approve,
+      })
+
+      setSelectedRequestIds([])
+
+      if (result.reviewedCount > 0) {
+        toast.success(
+          approve
+            ? `${result.reviewedCount} request${result.reviewedCount === 1 ? "" : "s"} approved`
+            : `${result.reviewedCount} request${result.reviewedCount === 1 ? "" : "s"} rejected`
+        )
+        return
+      }
+
+      toast.success("No pending requests were changed.")
+    })
+  }
+
+  const handleVerifyTicket = () => {
+    setPendingAction(`verify-${event.id}`)
+
+    startTransition(async () => {
+      try {
+        const result = await verifyClubTicket({
+          workspaceSlug,
+          slug: clubSlug,
+          eventId: event.id,
+          value: verificationValue,
+        })
+
+        setVerificationResult(result)
+
+        if (result.valid) {
+          toast.success(result.message)
+        } else {
+          toast.error(result.message)
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Verification failed.")
+      } finally {
+        setPendingAction(null)
+      }
+    })
+  }
+
+  return (
+    <div className="do-card p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[18px] font-medium text-cream">{event.title}</p>
+            <span className="do-pill">{event.status}</span>
+            <span className="do-pill">
+              <ClipboardListIcon className="size-3.5" />
+              {event.ticketCount} issued
+            </span>
+            <span className="do-pill">
+              <CheckCircle2Icon className="size-3.5" />
+              {event.checkedInCount} checked in
+            </span>
+            {event.pendingRequestCount ? (
+              <span className="do-pill">{event.pendingRequestCount} pending</span>
+            ) : null}
+            {event.capacity !== null ? (
+              <span className="do-pill">
+                {event.remainingCapacity ?? 0} / {event.capacity} left
+              </span>
+            ) : null}
+          </div>
+          {event.summary ? (
+            <p className="mt-3 text-[13px] leading-6 text-tan">{event.summary}</p>
+          ) : null}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="do-pill">
+              <CalendarDaysIcon className="size-3.5" />
+              {formatEventDate(event.date)} · {event.time}
+            </span>
+            <span className="do-pill">
+              <MapPinIcon className="size-3.5" />
+              {event.location}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 flex-col items-start gap-2">
+          {event.viewerTicket ? (
+            <>
+              <span className="do-pill">Ticket approved</span>
+              <Link
+                href={workspaceTicketsPath(workspaceSlug)}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                View ticket
+              </Link>
+            </>
+          ) : event.viewerRequestStatus === "pending" ? (
+            <>
+              <span className="do-pill">Request pending</span>
+              <Link
+                href={workspaceTicketsPath(workspaceSlug)}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                Open tickets
+              </Link>
+            </>
+          ) : event.status === "open" && canParticipate ? (
+            <Button
+              disabled={isPending && pendingAction === `request-${event.id}`}
+              onClick={() =>
+                runAction(`request-${event.id}`, async () => {
+                  await requestClubTicket({
+                    workspaceSlug,
+                    slug: clubSlug,
+                    eventId: event.id,
+                  })
+
+                  toast.success(
+                    event.viewerRequestStatus === "rejected"
+                      ? "Ticket request sent again"
+                      : "Ticket request sent"
+                  )
+                })
+              }
+            >
+              <TicketIcon className="size-4" />
+              {event.viewerRequestStatus === "rejected" ? "Register again" : "Register"}
+            </Button>
+          ) : (
+            <span className="do-pill">Ticketing closed</span>
+          )}
+          {canManage ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAdminTools((current) => !current)}
+            >
+              {showAdminTools ? "Hide ticketing" : "Manage ticketing"}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {canManage && showAdminTools ? (
+        <div className="mt-5 space-y-4">
+          {event.pendingRequests.length ? (
+            <div className="rounded-[18px] border border-hairline bg-surface/55 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-[13px] font-medium text-parchment">Pending requests</p>
+                  <p className="mt-1 text-[12px] leading-6 text-tan">
+                    Approve one by one, in bulk, or all at once.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    disabled={
+                      selectedRequestIds.length === 0 ||
+                      (isPending && pendingAction === `approve-selected-${event.id}`)
+                    }
+                    onClick={() =>
+                      handleReviewRequests(
+                        selectedRequestIds,
+                        true,
+                        `approve-selected-${event.id}`
+                      )
+                    }
+                  >
+                    Approve selected
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      isPending && pendingAction === `approve-all-${event.id}`
+                    }
+                    onClick={() =>
+                      handleReviewRequests(
+                        event.pendingRequests.map((request) => request.ticketId),
+                        true,
+                        `approve-all-${event.id}`
+                      )
+                    }
+                  >
+                    Approve all
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      selectedRequestIds.length === 0 ||
+                      (isPending && pendingAction === `reject-selected-${event.id}`)
+                    }
+                    onClick={() =>
+                      handleReviewRequests(
+                        selectedRequestIds,
+                        false,
+                        `reject-selected-${event.id}`
+                      )
+                    }
+                  >
+                    Reject selected
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {event.pendingRequests.map((request) => (
+                  <label
+                    key={request.ticketId}
+                    className="flex cursor-pointer items-start gap-3 rounded-[14px] border border-hairline bg-panel/60 p-3"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedRequestIds.includes(request.ticketId)}
+                      onChange={() => toggleSelectedRequest(request.ticketId)}
+                      className="mt-1 size-4 rounded border-hairline bg-field"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <Link
+                        href={workspacePersonPath(workspaceSlug, request.userId)}
+                        className="block text-[14px] font-medium text-cream"
+                      >
+                        {request.name}
+                      </Link>
+                      <span className="mt-1 block text-[12px] leading-6 text-tan">
+                        {request.email ?? "No email synced"} · Requested{" "}
+                        {formatShortDate(request.createdAt)}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="rounded-[18px] border border-hairline bg-surface/55 p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-[13px] font-medium text-parchment">Issue tickets</p>
+                <p className="mt-1 text-[12px] leading-6 text-tan">
+                  Select members, issue to a few, or issue to everyone in the club.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  disabled={
+                    selectedMemberIds.length === 0 ||
+                    (isPending && pendingAction === `issue-selected-${event.id}`)
+                  }
+                  onClick={() =>
+                    handleIssueTickets(
+                      selectedMemberIds,
+                      `issue-selected-${event.id}`
+                    )
+                  }
+                >
+                  Issue selected
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isPending && pendingAction === `issue-all-${event.id}`}
+                  onClick={() =>
+                    handleIssueTickets(
+                      members.map((member) => member.id),
+                      `issue-all-${event.id}`
+                    )
+                  }
+                >
+                  Issue to all
+                </Button>
+              </div>
+            </div>
+
+            <div className="relative mt-4">
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tan" />
+              <Input
+                value={memberSearch}
+                onChange={(currentEvent) => setMemberSearch(currentEvent.target.value)}
+                placeholder="Search members"
+                className="pl-9"
+              />
+            </div>
+
+            <div className="mt-4 max-h-64 space-y-3 overflow-auto pr-1">
+              {filteredMembers.map((member) => {
+                const alreadyApproved = approvedUserIds.has(member.id)
+                const hasPendingRequest = pendingUserIds.has(member.id)
+                const disabled = alreadyApproved
+
+                return (
+                  <label
+                    key={`${event.id}-${member.id}`}
+                    className={cn(
+                      "flex items-start gap-3 rounded-[14px] border p-3",
+                      disabled
+                        ? "border-hairline bg-panel/40 opacity-70"
+                        : "cursor-pointer border-hairline bg-panel/60"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedMemberIds.includes(member.id)}
+                      onChange={() => toggleSelectedMember(member.id)}
+                      disabled={disabled}
+                      className="mt-1 size-4 rounded border-hairline bg-field"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="truncate text-[14px] font-medium text-cream">
+                          {member.name}
+                        </span>
+                        <span className="do-pill">{clubRoleLabel(member.role)}</span>
+                        {alreadyApproved ? <span className="do-pill">Ticketed</span> : null}
+                        {hasPendingRequest ? <span className="do-pill">Requested</span> : null}
+                      </span>
+                      <span className="mt-1 block text-[12px] leading-6 text-tan">
+                        Joined {formatShortDate(member.joinedAt)}
+                      </span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-[18px] border border-hairline bg-surface/55 p-4">
+            <p className="text-[13px] font-medium text-parchment">Verify QR or code</p>
+            <p className="mt-1 text-[12px] leading-6 text-tan">
+              Paste the QR payload or ticket code to confirm it belongs to this event.
+            </p>
+            <textarea
+              value={verificationValue}
+              onChange={(currentEvent) => setVerificationValue(currentEvent.target.value)}
+              className={`${textareaClassName} mt-4 min-h-24`}
+              placeholder="Paste QR payload or ticket code"
+            />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={
+                  !verificationValue.trim() ||
+                  (isPending && pendingAction === `verify-${event.id}`)
+                }
+                onClick={handleVerifyTicket}
+              >
+                Verify
+              </Button>
+              {verificationResult ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setVerificationValue("")
+                    setVerificationResult(null)
+                  }}
+                >
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+
+            {verificationResult ? (
+              <div className="mt-4 rounded-[14px] border border-hairline bg-panel/60 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="do-pill">{verificationResult.status}</span>
+                  {verificationResult.code ? (
+                    <span className="do-pill">{verificationResult.code}</span>
+                  ) : null}
+                  {verificationResult.attendeeName ? (
+                    <span className="text-[13px] font-medium text-cream">
+                      {verificationResult.attendeeName}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-[12px] leading-6 text-tan">
+                  {verificationResult.message}
+                </p>
+                {verificationResult.attendeeEmail ? (
+                  <p className="mt-1 text-[12px] leading-6 text-tan">
+                    {verificationResult.attendeeEmail}
+                  </p>
+                ) : null}
+                {verificationResult.checkedInAt ? (
+                  <p className="mt-1 text-[12px] leading-6 text-tan">
+                    Checked in by {verificationResult.checkedInByName ?? "club staff"}
+                  </p>
+                ) : null}
+                {verificationResult.canCheckIn && verificationResult.ticketId ? (
+                  <Button
+                    size="sm"
+                    className="mt-3"
+                    disabled={
+                      isPending && pendingAction === `verify-checkin-${event.id}`
+                    }
+                    onClick={() =>
+                      runAction(`verify-checkin-${event.id}`, async () => {
+                        await checkInClubTicket({
+                          workspaceSlug,
+                          slug: clubSlug,
+                          ticketId: verificationResult.ticketId as string,
+                        })
+
+                        setVerificationResult((current) =>
+                          current
+                            ? {
+                                ...current,
+                                canCheckIn: false,
+                                checkedInAt: Date.now(),
+                                message: "Ticket checked in.",
+                              }
+                            : current
+                        )
+                        toast.success("Ticket checked in")
+                      })
+                    }
+                  >
+                    Check in verified ticket
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {event.attendees.length ? (
+            <div className="rounded-[18px] border border-hairline bg-surface/55 p-4">
+              <p className="text-[13px] font-medium text-parchment">Approved attendees</p>
+              <div className="mt-4 space-y-3">
+                {event.attendees.map((attendee) => (
+                  <div
+                    key={attendee.ticketId}
+                    className="rounded-[14px] border border-hairline bg-panel/60 p-3"
+                  >
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <Link
+                        href={workspacePersonPath(workspaceSlug, attendee.userId)}
+                        className="min-w-0 flex-1"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-[14px] font-medium text-cream">
+                            {attendee.name}
+                          </p>
+                          <span className="do-pill">{attendee.code}</span>
+                          <span className="do-pill">
+                            {attendee.checkedInAt ? "Checked in" : "Ready"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[12px] leading-6 text-tan">
+                          {attendee.email ?? "No email synced"} · Approved{" "}
+                          {formatShortDate(attendee.approvedAt ?? attendee.createdAt)}
+                        </p>
+                      </Link>
+
+                      {attendee.checkedInAt ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={
+                            isPending &&
+                            pendingAction === `reset-ticket-${attendee.ticketId}`
+                          }
+                          onClick={() =>
+                            runAction(`reset-ticket-${attendee.ticketId}`, async () => {
+                              await resetClubTicket({
+                                workspaceSlug,
+                                slug: clubSlug,
+                                ticketId: attendee.ticketId,
+                              })
+                              toast.success("Ticket reset")
+                            })
+                          }
+                        >
+                          Reset
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled={
+                            isPending &&
+                            pendingAction === `checkin-ticket-${attendee.ticketId}`
+                          }
+                          onClick={() =>
+                            runAction(`checkin-ticket-${attendee.ticketId}`, async () => {
+                              await checkInClubTicket({
+                                workspaceSlug,
+                                slug: clubSlug,
+                                ticketId: attendee.ticketId,
+                              })
+                              toast.success("Ticket checked in")
+                            })
+                          }
+                        >
+                          Check in
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : event.viewerTicket ? (
+        <div className="mt-5 rounded-[18px] border border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan">
+          Your ticket is approved and saved in the Tickets sidebar.
+        </div>
+      ) : event.viewerRequestStatus === "pending" ? (
+        <div className="mt-5 rounded-[18px] border border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan">
+          Your registration is waiting for admin approval. You can track it from the
+          Tickets sidebar.
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function LiveClubPage({
   workspaceSlug,
   clubSlug,
@@ -934,9 +1693,6 @@ function LiveClubPageInner({
   const removeMember = useMutation(channelsApi.removeMember)
   const setMemberRole = useMutation(channelsApi.setMemberRole)
   const createClubEvent = useMutation(channelsApi.createClubEvent)
-  const joinClubEvent = useMutation(channelsApi.joinClubEvent)
-  const checkInClubTicket = useMutation(channelsApi.checkInClubTicket)
-  const resetClubTicket = useMutation(channelsApi.resetClubTicket)
   const createClubPoll = useMutation(channelsApi.createClubPoll)
   const voteOnClubPoll = useMutation(channelsApi.voteOnClubPoll)
   const setClubPollStatus = useMutation(channelsApi.setClubPollStatus)
@@ -958,6 +1714,8 @@ function LiveClubPageInner({
   const [eventDate, setEventDate] = useState("")
   const [eventTime, setEventTime] = useState("")
   const [eventLocation, setEventLocation] = useState("")
+  const [eventCapacity, setEventCapacity] = useState("")
+  const [isEventComposerOpen, setIsEventComposerOpen] = useState(false)
   const [memberSearch, setMemberSearch] = useState("")
   const [isPollComposerOpen, setIsPollComposerOpen] = useState(false)
   const [pollQuestion, setPollQuestion] = useState("")
@@ -1234,6 +1992,7 @@ function LiveClubPageInner({
           date: eventDate,
           time: eventTime.trim(),
           location: eventLocation.trim(),
+          capacity: eventCapacity.trim() ? Number(eventCapacity) : undefined,
         })
       },
       "Club event created",
@@ -1243,8 +2002,18 @@ function LiveClubPageInner({
         setEventDate("")
         setEventTime("")
         setEventLocation("")
+        setEventCapacity("")
+        setIsEventComposerOpen(false)
       }
     )
+  }
+
+  const handleCloseEventComposer = () => {
+    if (isPending && pendingAction === "create-club-event") {
+      return
+    }
+
+    setIsEventComposerOpen(false)
   }
 
   const handleCreatePoll = (event: FormEvent<HTMLFormElement>) => {
@@ -1382,8 +2151,29 @@ function LiveClubPageInner({
 
   if (!isDiscussionView) {
     return (
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <main className="space-y-6">
+      <>
+        <ClubEventComposerModal
+          open={isEventComposerOpen}
+          canManage={clubOps.canManage}
+          title={eventTitle}
+          setTitle={setEventTitle}
+          summary={eventSummary}
+          setSummary={setEventSummary}
+          date={eventDate}
+          setDate={setEventDate}
+          time={eventTime}
+          setTime={setEventTime}
+          location={eventLocation}
+          setLocation={setEventLocation}
+          capacity={eventCapacity}
+          setCapacity={setEventCapacity}
+          isPending={isPending && pendingAction === "create-club-event"}
+          onClose={handleCloseEventComposer}
+          onSubmit={handleCreateEvent}
+        />
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <main className="space-y-6">
           <ClubHero
             clubSlug={clubSlug}
             name={conversation.name}
@@ -1485,296 +2275,36 @@ function LiveClubPageInner({
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <p className="do-eyebrow">Events</p>
-                    <h3 className="mt-2 text-[24px] font-medium text-cream">
-                      Events and tickets
-                    </h3>
+                    <h3 className="mt-2 text-[24px] font-medium text-cream">Event ticketing</h3>
                   </div>
-                  {!clubOps.canManage ? (
-                    <span className="do-pill">Managers create events</span>
-                  ) : null}
+                  {clubOps.canManage ? (
+                    <Button onClick={() => setIsEventComposerOpen(true)}>
+                      <PlusIcon className="size-4" />
+                      Add event
+                    </Button>
+                  ) : (
+                    <span className="do-pill">Register and track approvals from Tickets</span>
+                  )}
                 </div>
 
-                <div className="mt-5 grid gap-4 2xl:grid-cols-[320px_1fr]">
-                  <div className="do-card p-4">
-                    <div className="inline-flex items-center gap-2 text-[12px] text-parchment">
-                      <TicketIcon className="size-4 text-terracotta" />
-                      Create event
-                    </div>
-
-                    <form onSubmit={handleCreateEvent} className="mt-4 space-y-3">
-                      <Input
-                        value={eventTitle}
-                        onChange={(event) => setEventTitle(event.target.value)}
-                        placeholder="Event title"
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-event")
-                        }
-                      />
-                      <textarea
-                        value={eventSummary}
-                        onChange={(event) => setEventSummary(event.target.value)}
-                        placeholder="What is this event about?"
-                        className={textareaClassName}
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-event")
-                        }
-                      />
-                      <Input
-                        type="date"
-                        value={eventDate}
-                        onChange={(event) => setEventDate(event.target.value)}
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-event")
-                        }
-                      />
-                      <Input
-                        value={eventTime}
-                        onChange={(event) => setEventTime(event.target.value)}
-                        placeholder="6:30 PM"
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-event")
-                        }
-                      />
-                      <Input
-                        value={eventLocation}
-                        onChange={(event) => setEventLocation(event.target.value)}
-                        placeholder="Main auditorium or meeting link"
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-event")
-                        }
-                      />
-                      <Button
-                        type="submit"
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-event") ||
-                          !eventTitle.trim() ||
-                          !eventDate ||
-                          !eventTime.trim() ||
-                          !eventLocation.trim()
-                        }
-                      >
-                        <PlusIcon className="size-4" />
-                        Publish event
-                      </Button>
-                    </form>
-                  </div>
-
-                  <div className="space-y-4">
+                <div className="mt-5 space-y-4">
                     {clubOps.events.length ? (
                       clubOps.events.map((event) => (
-                        <div key={event.id} className="do-card p-5">
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-[18px] font-medium text-cream">
-                                  {event.title}
-                                </p>
-                                <span className="do-pill">{event.status}</span>
-                                <span className="do-pill">
-                                  <ClipboardListIcon className="size-3.5" />
-                                  {event.ticketCount} tickets
-                                </span>
-                                <span className="do-pill">
-                                  <CheckCircle2Icon className="size-3.5" />
-                                  {event.checkedInCount} checked in
-                                </span>
-                              </div>
-                              {event.summary ? (
-                                <p className="mt-3 text-[13px] leading-6 text-tan">
-                                  {event.summary}
-                                </p>
-                              ) : null}
-                              <div className="mt-4 flex flex-wrap gap-2">
-                                <span className="do-pill">
-                                  <CalendarDaysIcon className="size-3.5" />
-                                  {formatEventDate(event.date)} · {event.time}
-                                </span>
-                                <span className="do-pill">
-                                  <MapPinIcon className="size-3.5" />
-                                  {event.location}
-                                </span>
-                              </div>
-                            </div>
-
-                            {event.viewerTicket ? (
-                              <span className="do-pill">Your ticket is ready</span>
-                            ) : event.status === "open" ? (
-                              <Button
-                                disabled={
-                                  isPending && pendingAction === `join-event-${event.id}`
-                                }
-                                onClick={() =>
-                                  runAction(
-                                    `join-event-${event.id}`,
-                                    () =>
-                                      joinClubEvent({
-                                        workspaceSlug,
-                                        slug: clubSlug,
-                                        eventId: event.id,
-                                      }),
-                                    "Ticket generated"
-                                  )
-                                }
-                              >
-                                <TicketIcon className="size-4" />
-                                Join event
-                              </Button>
-                            ) : (
-                              <span className="do-pill">Ticketing closed</span>
-                            )}
-                          </div>
-
-                          {event.viewerTicket ? (
-                            <div className="relative mt-5 overflow-hidden rounded-[10px] border border-hairline bg-[linear-gradient(180deg,rgba(201,132,122,0.16),rgba(201,132,122,0)_18%),rgba(20,20,22,0.94)] p-5 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/8 before:content-['']">
-                              <div className="grid gap-5 lg:grid-cols-[1fr_220px]">
-                                <div>
-                                  <p className="do-eyebrow">Your Ticket</p>
-                                  <h4 className="mt-2 text-[22px] font-semibold text-parchment">
-                                    {event.viewerTicket.eventTitle}
-                                  </h4>
-                                  <div className="mt-4 flex flex-wrap gap-2">
-                                    <span className="do-pill do-pill-platinum">
-                                      {event.viewerTicket.attendeeName}
-                                    </span>
-                                    <span className="do-pill do-pill-gold">
-                                      {event.viewerTicket.organizationName}
-                                    </span>
-                                    <span className="do-pill do-pill-rose">
-                                      {event.viewerTicket.checkedInAt
-                                        ? "Checked in"
-                                        : "Ready for entry"}
-                                    </span>
-                                  </div>
-                                  <div className="mt-4 rounded-[8px] border border-[rgba(200,169,110,0.18)] bg-[rgba(200,169,110,0.08)] px-3 py-2">
-                                    <p className="text-[10px] font-semibold tracking-[0.08em] text-gold uppercase">
-                                      Pass Code
-                                    </p>
-                                    <p className="mt-2 font-mono text-[14px] tracking-[0.12em] text-gold">
-                                      {event.viewerTicket.code}
-                                    </p>
-                                  </div>
-                                  <div className="mt-4 space-y-1.5 text-[13px] leading-6 text-tan">
-                                    <p>Club: {event.viewerTicket.clubName}</p>
-                                    <p>
-                                      Entry: {formatEventDate(event.viewerTicket.eventDate)} at{" "}
-                                      {event.viewerTicket.eventTime}
-                                    </p>
-                                    <p>Venue: {event.viewerTicket.eventLocation}</p>
-                                  </div>
-                                  {event.viewerTicket.attendeeEmail ? (
-                                    <p className="mt-1 text-[13px] leading-6 text-tan">
-                                      Email: {event.viewerTicket.attendeeEmail}
-                                    </p>
-                                  ) : null}
-                                </div>
-                                <TicketQr
-                                  value={event.viewerTicket.qrValue}
-                                  alt={`${event.viewerTicket.eventTitle} ticket QR`}
-                                />
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {clubOps.canManage && event.attendees.length ? (
-                            <div className="mt-5 space-y-3">
-                              <p className="do-eyebrow">Attendee roster</p>
-                              {event.attendees.map((attendee) => (
-                                <div
-                                  key={attendee.ticketId}
-                                  className="rounded-[20px] border border-hairline bg-surface/55 p-4"
-                                >
-                                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                    <Link
-                                      href={workspacePersonPath(workspaceSlug, attendee.userId)}
-                                      className="min-w-0 flex-1 text-left"
-                                    >
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <p className="text-[15px] font-medium text-cream">
-                                          {attendee.name}
-                                        </p>
-                                        <span className="do-pill">{attendee.code}</span>
-                                        <span className="do-pill">
-                                          {attendee.checkedInAt ? "Checked in" : "Waiting"}
-                                        </span>
-                                      </div>
-                                      <p className="mt-2 text-[12px] leading-6 text-tan">
-                                        {attendee.email ?? "No email synced"}
-                                      </p>
-                                      <p className="mt-1 text-[12px] leading-6 text-tan">
-                                        Claimed {formatShortDate(attendee.createdAt)}
-                                        {attendee.checkedInAt
-                                          ? ` · Checked in by ${
-                                              attendee.checkedInByName ?? "club staff"
-                                            }`
-                                          : ""}
-                                      </p>
-                                    </Link>
-
-                                    {attendee.checkedInAt ? (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={
-                                          isPending &&
-                                          pendingAction === `reset-ticket-${attendee.ticketId}`
-                                        }
-                                        onClick={() =>
-                                          runAction(
-                                            `reset-ticket-${attendee.ticketId}`,
-                                            () =>
-                                              resetClubTicket({
-                                                workspaceSlug,
-                                                slug: clubSlug,
-                                                ticketId: attendee.ticketId,
-                                              }),
-                                            "Ticket reset"
-                                          )
-                                        }
-                                      >
-                                        Reset
-                                      </Button>
-                                    ) : (
-                                      <Button
-                                        size="sm"
-                                        disabled={
-                                          isPending &&
-                                          pendingAction === `checkin-ticket-${attendee.ticketId}`
-                                        }
-                                        onClick={() =>
-                                          runAction(
-                                            `checkin-ticket-${attendee.ticketId}`,
-                                            () =>
-                                              checkInClubTicket({
-                                                workspaceSlug,
-                                                slug: clubSlug,
-                                                ticketId: attendee.ticketId,
-                                              }),
-                                            "Ticket checked in"
-                                          )
-                                        }
-                                      >
-                                        Check in
-                                      </Button>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
+                        <EventWorkflowCard
+                          key={event.id}
+                          workspaceSlug={workspaceSlug}
+                          clubSlug={clubSlug}
+                          event={event}
+                          members={members}
+                          canManage={clubOps.canManage}
+                          canParticipate={clubOps.canParticipate}
+                        />
                       ))
                     ) : (
                       <div className="rounded-[24px] border border-dashed border-hairline bg-surface/55 p-5 text-[13px] leading-6 text-tan">
                         No events yet.
                       </div>
                     )}
-                  </div>
                 </div>
               </section>
 
@@ -1800,12 +2330,13 @@ function LiveClubPageInner({
               </Link>
             </div>
           </section>
-        </main>
-
-        <aside className="space-y-4">{membershipSidebar}</aside>
-      </div>
-    )
-  }
+	        </main>
+	
+	        <aside className="space-y-4">{membershipSidebar}</aside>
+	      </div>
+	      </>
+	    )
+	  }
 
   if (!canViewMessages) {
     return (

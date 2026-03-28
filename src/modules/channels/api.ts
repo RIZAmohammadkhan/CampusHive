@@ -113,15 +113,20 @@ export type ClubOperationsData = {
     date: string
     time: string
     location: string
+    capacity: number | null
+    remainingCapacity: number | null
     status: "open" | "closed"
     createdAt: number
     createdByName: string
     ticketCount: number
+    pendingRequestCount: number
     checkedInCount: number
+    viewerRequestStatus: "pending" | "approved" | "rejected" | null
     viewerTicket: {
       id: string
       code: string
       createdAt: number
+      approvedAt: number | null
       checkedInAt: number | null
       attendeeName: string
       attendeeEmail: string | null
@@ -140,8 +145,16 @@ export type ClubOperationsData = {
       email: string | null
       code: string
       createdAt: number
+      approvedAt: number | null
       checkedInAt: number | null
       checkedInByName: string | null
+    }>
+    pendingRequests: Array<{
+      ticketId: string
+      userId: string
+      name: string
+      email: string | null
+      createdAt: number
     }>
   }>
   polls: Array<{
@@ -219,6 +232,7 @@ export const channelsApi = {
       date: string
       time: string
       location: string
+      capacity?: number
     },
     { eventId: string }
   >("chat:createClubEvent"),
@@ -230,6 +244,45 @@ export const channelsApi = {
     },
     { ticketId: string; code: string }
   >("chat:joinClubEvent"),
+  issueClubTickets: mutationRef<
+    {
+      workspaceSlug: string
+      slug: string
+      eventId: string
+      userIds: string[]
+    },
+    { issuedCount: number; skippedCount: number }
+  >("chat:issueClubTickets"),
+  reviewClubEventRequests: mutationRef<
+    {
+      workspaceSlug: string
+      slug: string
+      eventId: string
+      ticketIds: string[]
+      approve: boolean
+    },
+    { reviewedCount: number; skippedCount: number }
+  >("chat:reviewClubEventRequests"),
+  verifyClubTicket: mutationRef<
+    {
+      workspaceSlug: string
+      slug: string
+      eventId: string
+      value: string
+    },
+    {
+      valid: boolean
+      canCheckIn: boolean
+      status: "pending" | "approved" | "rejected" | "invalid"
+      message: string
+      ticketId: string | null
+      attendeeName: string | null
+      attendeeEmail: string | null
+      code: string | null
+      checkedInAt: number | null
+      checkedInByName: string | null
+    }
+  >("chat:verifyClubTicket"),
   checkInClubTicket: mutationRef<
     {
       workspaceSlug: string

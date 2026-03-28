@@ -14,6 +14,25 @@ function formatDate(timestamp: number) {
   }).format(new Date(timestamp))
 }
 
+function formatTicketStatus(ticket: {
+  status: "pending" | "approved" | "rejected"
+  checkedInAt: number | null
+}) {
+  if (ticket.checkedInAt) {
+    return "Checked in"
+  }
+
+  if (ticket.status === "pending") {
+    return "Pending approval"
+  }
+
+  if (ticket.status === "rejected") {
+    return "Rejected"
+  }
+
+  return "Ticket issued"
+}
+
 export function MemberProfileSheet({
   workspaceSlug,
   userId,
@@ -141,13 +160,13 @@ export function MemberProfileSheet({
                         <p className="text-[15px] font-medium text-cream">
                           {ticket.eventTitle}
                         </p>
-                        <span className="do-pill">{ticket.code}</span>
+                        {ticket.code ? <span className="do-pill">{ticket.code}</span> : null}
                         <span className="do-pill">
-                          {ticket.checkedInAt ? "Checked in" : "Ticket issued"}
+                          {formatTicketStatus(ticket)}
                         </span>
                       </div>
                       <p className="mt-2 text-[12px] leading-6 text-tan">
-                        {ticket.clubName} · Created {formatDate(ticket.createdAt)}
+                        {ticket.clubName} · Requested {formatDate(ticket.createdAt)}
                       </p>
                     </div>
                   ))

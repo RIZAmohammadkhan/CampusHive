@@ -62,6 +62,19 @@ async function nextOrderForDay(
   return existing.reduce((maxOrder, event) => Math.max(maxOrder, event.order), -1) + 1
 }
 
+async function findConversationBySlug(
+  ctx: QueryCtx | MutationCtx,
+  workspaceId: Id<"workspaces">,
+  slug: string
+) {
+  return await ctx.db
+    .query("conversations")
+    .withIndex("by_workspace_and_slug", (q) =>
+      q.eq("workspaceId", workspaceId).eq("slug", slug)
+    )
+    .unique()
+}
+
 export const schedule = queryGeneric({
   args: {
     workspaceSlug: v.string(),
@@ -76,20 +89,133 @@ export const schedule = queryGeneric({
       return null
     }
 
-    const { role } = await getWorkspaceViewer(ctx, workspace)
-    const events = await ctx.db
-      .query("events")
-      .withIndex("by_workspace_and_day_order", (q) =>
-        q.eq("workspaceId", workspace._id)
-      )
-      .collect()
+    const { role, currentUser } = await getWorkspaceViewer(ctx, workspace)
+    const [events, clubEvents, conversations] = await Promise.all([
+      ctx.db
+        .query("events")
+        .withIndex("by_workspace_and_day_order", (q) =>
+          q.eq("workspaceId", workspace._id)
+        )
+        .collect(),
+      ctx.db
+        .query("clubEvents")
+        .withIndex("by_workspace_and_created_at", (q) => q.eq("workspaceId", workspace._id))
+        .collect(),
+      ctx.db
+        .query("conversations")
+        .withIndex("by_workspace_and_slug", (q) => q.eq("workspaceId", workspace._id))
+        .collect(),
+    ])
+    const conversationsById = new Map(
+      conversations.map((conversation) => [String(conversation._id), conversation] as const)
+    )
+    const combinedItems: Array<{
+      dayKey: string
+      dayName: string
+      dateLabel: string
+      item: {
+        id: string
+        kind: "workspace" | "club"
+        title: string
+        time: string
+        type: string | null
+        location: string
+        isVirtual: boolean
+        clubName: string | null
+        clubSlug: string | null
+        eventStatus: "open" | "closed" | null
+        ticketingEnabled: boolean
+        ticketCount: number | null
+        remainingCapacity: number | null
+        viewerTicketStatus: "pending" | "approved" | "rejected" | null
+      }
+    }> = []
 
-    events.sort((left, right) => {
+    for (const event of events) {
+      combinedItems.push({
+        dayKey: event.dayKey,
+        dayName: event.dayName,
+        dateLabel: event.dateLabel,
+        item: {
+          id: String(event._id),
+          kind: "workspace",
+          title: event.title,
+          time: event.time,
+          type: event.type,
+          location: event.location,
+          isVirtual: isVirtualLocation(event.location),
+          clubName: null,
+          clubSlug: null,
+          eventStatus: null,
+          ticketingEnabled: false,
+          ticketCount: null,
+          remainingCapacity: null,
+          viewerTicketStatus: null,
+        },
+      })
+    }
+
+    const clubEventItems = await Promise.all(
+      clubEvents.map(async (event) => {
+        const conversation = conversationsById.get(String(event.conversationId))
+
+        if (!conversation || conversation.kind !== "channel") {
+          return null
+        }
+
+        const tickets = await ctx.db
+          .query("clubEventTickets")
+          .withIndex("by_event_and_created_at", (q) => q.eq("eventId", event._id))
+          .collect()
+        const approvedCount = tickets.filter(
+          (ticket) =>
+            (ticket.status ?? "approved") === "approved" &&
+            typeof ticket.code === "string" &&
+            ticket.code.length > 0
+        ).length
+        const viewerTicket = currentUser
+          ? tickets.find((ticket) => ticket.userId === currentUser._id) ?? null
+          : null
+        const { dayKey, dayName, dateLabel } = formatEventDateParts(event.date)
+
+        return {
+          dayKey,
+          dayName,
+          dateLabel,
+          item: {
+            id: String(event._id),
+            kind: "club" as const,
+            title: event.title,
+            time: event.time,
+            type: "Club event",
+            location: event.location,
+            isVirtual: isVirtualLocation(event.location),
+            clubName: conversation.name,
+            clubSlug: conversation.slug,
+            eventStatus: event.status,
+            ticketingEnabled: true,
+            ticketCount: approvedCount,
+            remainingCapacity:
+              typeof event.capacity === "number"
+                ? Math.max(event.capacity - approvedCount, 0)
+                : null,
+            viewerTicketStatus: viewerTicket ? (viewerTicket.status ?? "approved") : null,
+          },
+        }
+      })
+    )
+
+    combinedItems.push(...clubEventItems.filter((event) => event !== null))
+    combinedItems.sort((left, right) => {
       if (left.dayKey !== right.dayKey) {
         return left.dayKey.localeCompare(right.dayKey)
       }
 
-      return left.order - right.order
+      if (left.item.time !== right.item.time) {
+        return left.item.time.localeCompare(right.item.time)
+      }
+
+      return left.item.title.localeCompare(right.item.title)
     })
 
     const grouped = new Map<
@@ -100,36 +226,36 @@ export const schedule = queryGeneric({
         dateLabel: string
         items: Array<{
           id: string
+          kind: "workspace" | "club"
           title: string
           time: string
-          type: string
+          type: string | null
           location: string
           isVirtual: boolean
+          clubName: string | null
+          clubSlug: string | null
+          eventStatus: "open" | "closed" | null
+          ticketingEnabled: boolean
+          ticketCount: number | null
+          remainingCapacity: number | null
+          viewerTicketStatus: "pending" | "approved" | "rejected" | null
         }>
       }
     >()
 
-    for (const event of events) {
-      const existing = grouped.get(event.dayKey)
-      const item = {
-        id: String(event._id),
-        title: event.title,
-        time: event.time,
-        type: event.type,
-        location: event.location,
-        isVirtual: isVirtualLocation(event.location),
-      }
+    for (const entry of combinedItems) {
+      const existing = grouped.get(entry.dayKey)
 
       if (existing) {
-        existing.items.push(item)
+        existing.items.push(entry.item)
         continue
       }
 
-      grouped.set(event.dayKey, {
-        dayKey: event.dayKey,
-        dayName: event.dayName,
-        dateLabel: event.dateLabel,
-        items: [item],
+      grouped.set(entry.dayKey, {
+        dayKey: entry.dayKey,
+        dayName: entry.dayName,
+        dateLabel: entry.dateLabel,
+        items: [entry.item],
       })
     }
 
@@ -137,10 +263,23 @@ export const schedule = queryGeneric({
 
     return {
       canManage: role === "admin",
+      manageableClubs:
+        role === "admin"
+          ? conversations
+              .filter(
+                (conversation) =>
+                  conversation.kind === "channel" && conversation.slug !== "general"
+              )
+              .map((conversation) => ({
+                slug: conversation.slug,
+                name: conversation.name,
+              }))
+              .sort((left, right) => left.name.localeCompare(right.name))
+          : [],
       summary: [
         {
           label: "Upcoming",
-          value: events.length.toString().padStart(2, "0"),
+          value: combinedItems.length.toString().padStart(2, "0"),
           detail: "events and meetings currently on the shared campus calendar",
         },
         {
@@ -150,8 +289,8 @@ export const schedule = queryGeneric({
         },
         {
           label: "Virtual-ready",
-          value: events
-            .filter((event) => isVirtualLocation(event.location))
+          value: combinedItems
+            .filter((event) => event.item.isVirtual)
             .length.toString()
             .padStart(2, "0"),
           detail: "sessions already marked as online, hybrid, or link-based",
@@ -166,10 +305,12 @@ export const createEvent = mutationGeneric({
   args: {
     workspaceSlug: v.string(),
     title: v.string(),
-    type: v.string(),
+    type: v.optional(v.string()),
     date: v.string(),
     time: v.string(),
     location: v.string(),
+    clubSlug: v.optional(v.string()),
+    capacity: v.optional(v.number()),
   },
   handler: async (ctx: MutationCtx, args) => {
     const identity = await requireIdentity(ctx)
@@ -185,7 +326,7 @@ export const createEvent = mutationGeneric({
     assertWorkspaceAdmin(role)
 
     const title = args.title.trim()
-    const type = args.type.trim()
+    const type = args.type?.trim() ?? ""
     const time = args.time.trim()
     const location = args.location.trim()
 
@@ -197,7 +338,7 @@ export const createEvent = mutationGeneric({
       throw new Error("Event title must be 90 characters or fewer.")
     }
 
-    if (type.length < 2 || type.length > 40) {
+    if (!args.clubSlug && (type.length < 2 || type.length > 40)) {
       throw new Error("Event type must be between 2 and 40 characters.")
     }
 
@@ -207,6 +348,55 @@ export const createEvent = mutationGeneric({
 
     if (location.length < 2 || location.length > 80) {
       throw new Error("Event location must be between 2 and 80 characters.")
+    }
+
+    if (
+      typeof args.capacity === "number" &&
+      (!Number.isInteger(args.capacity) || args.capacity < 1 || args.capacity > 5000)
+    ) {
+      throw new Error("Ticket capacity must be a whole number between 1 and 5000.")
+    }
+
+    if (args.clubSlug) {
+      const conversation = await findConversationBySlug(ctx, workspace._id, args.clubSlug)
+
+      if (!conversation || conversation.kind !== "channel" || conversation.slug === "general") {
+        throw new Error("Choose a valid club for this event.")
+      }
+
+      const eventId = await ctx.db.insert("clubEvents", {
+        workspaceId: workspace._id,
+        conversationId: conversation._id,
+        title,
+        date: args.date,
+        time,
+        location,
+        capacity: args.capacity,
+        status: "open",
+        createdAt: Date.now(),
+        createdByUserId: user._id,
+      })
+
+      const memberships = await ctx.db
+        .query("conversationMembers")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", conversation._id))
+        .collect()
+
+      await createNotifications(ctx, {
+        workspaceId: workspace._id,
+        recipientUserIds: memberships.map((membership) => membership.userId),
+        kind: "clubEvent",
+        title: `New ${conversation.name} event: ${title}`,
+        body: `${args.date} · ${time} · ${location}`,
+        route: `/channels/${conversation.slug}`,
+        actorUserId: user._id,
+        conversationId: conversation._id,
+        eventId,
+      })
+
+      return {
+        eventId: String(eventId),
+      }
     }
 
     const { dayKey, dayName, dateLabel } = formatEventDateParts(args.date)

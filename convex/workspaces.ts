@@ -270,10 +270,12 @@ export const memberProfile = queryGeneric({
 
           return {
             id: String(ticket._id),
-            code: ticket.code,
+            code: ticket.code ?? null,
+            status: ticket.status ?? "approved",
             eventTitle: event.title,
             clubName: conversation.name,
             createdAt: ticket.createdAt,
+            approvedAt: ticket.approvedAt ?? null,
             checkedInAt: ticket.checkedInAt ?? null,
           }
         })

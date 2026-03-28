@@ -4,12 +4,14 @@ import { eventsSection } from "@/modules/events/manifest"
 import { messagesSection } from "@/modules/messages/manifest"
 import { peopleSection } from "@/modules/people/manifest"
 import { projectsSection } from "@/modules/projects/manifest"
+import { ticketsSection } from "@/modules/tickets/manifest"
 
 import type { WorkspaceSection } from "@/modules/workspace/section"
 
 export const workspaceSections = [
   dashboardSection,
   messagesSection,
+  ticketsSection,
   channelsSection,
   peopleSection,
   projectsSection,
