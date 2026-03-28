@@ -4,6 +4,7 @@ import { v } from "convex/values"
 import {
   assertActiveOrganization,
   assertWorkspaceAdmin,
+  getDisplayNameFromUser,
   getWorkspaceViewer,
   requireIdentity,
   syncCurrentWorkspaceMember,
@@ -480,7 +481,7 @@ async function listConversationMembers(
 
       return {
         id: String(membership.userId),
-        name: user?.name ?? "Student member",
+        name: getDisplayNameFromUser(user),
         imageUrl: user?.imageUrl ?? null,
         role: resolveConversationMemberRole(conversation, membership),
         joinedAt: membership.joinedAt,
@@ -523,7 +524,7 @@ async function listPendingJoinRequests(
 
       return {
         userId: String(request.userId),
-        name: user?.name ?? "Student member",
+        name: getDisplayNameFromUser(user),
         imageUrl: user?.imageUrl ?? null,
         createdAt: request.createdAt,
       }
@@ -951,7 +952,7 @@ export const listMessages = queryGeneric({
           createdAt: message.createdAt,
           author: {
             id: String(message.authorId),
-            name: author?.name ?? "Student member",
+            name: getDisplayNameFromUser(author),
             imageUrl: author?.imageUrl ?? null,
             isCurrentUser: author?.externalId === identity.subject,
           },
@@ -1038,7 +1039,7 @@ export const clubOperations = queryGeneric({
                   return {
                     ticketId: String(ticket._id),
                     userId: String(ticket.userId),
-                    name: user?.name ?? "Student member",
+                    name: getDisplayNameFromUser(user),
                     email: user?.email ?? null,
                     code: ticket.code,
                     createdAt: ticket.createdAt,
@@ -1069,7 +1070,7 @@ export const clubOperations = queryGeneric({
           location: event.location,
           status: event.status,
           createdAt: event.createdAt,
-          createdByName: createdByUser?.name ?? "Club manager",
+          createdByName: getDisplayNameFromUser(createdByUser),
           ticketCount: tickets.length,
           checkedInCount,
           viewerTicket: viewerTicket
@@ -1078,7 +1079,7 @@ export const clubOperations = queryGeneric({
                 code: viewerTicket.code,
                 createdAt: viewerTicket.createdAt,
                 checkedInAt: viewerTicket.checkedInAt ?? null,
-                attendeeName: currentUser?.name ?? "Student member",
+                attendeeName: getDisplayNameFromUser(currentUser),
                 attendeeEmail: currentUser?.email ?? null,
                 organizationName: workspace.name,
                 clubName: convo.name,
@@ -1146,7 +1147,7 @@ export const clubOperations = queryGeneric({
           status: poll.status,
           totalVotes,
           createdAt: poll.createdAt,
-          createdByName: createdByUser?.name ?? "Club manager",
+          createdByName: getDisplayNameFromUser(createdByUser),
           viewerVoteOptionId,
           options: poll.options.map((option) => {
             const votesForOption = voteCountByOptionId.get(option.id) ?? 0

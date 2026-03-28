@@ -1,7 +1,12 @@
 import { queryGeneric } from "convex/server"
 import { v } from "convex/values"
 
-import { assertActiveOrganization, getWorkspaceViewer, requireIdentity } from "./lib/auth"
+import {
+  assertActiveOrganization,
+  getDisplayNameFromUser,
+  getWorkspaceViewer,
+  requireIdentity,
+} from "./lib/auth"
 import { getWorkspaceBySlug } from "./lib/workspaces"
 import { getActivePresenceEntries } from "./presence"
 import type { QueryCtx } from "./types"
@@ -77,7 +82,7 @@ export const office = queryGeneric({
 
         return {
           id: String(member.userId),
-          name: user?.name ?? "Student member",
+          name: getDisplayNameFromUser(user),
           role: member.role,
           route: presence?.route ?? null,
           routeLabel: presence?.route

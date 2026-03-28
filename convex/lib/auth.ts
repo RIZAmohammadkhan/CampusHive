@@ -33,6 +33,112 @@ function normalizeOptionalString(value: string | undefined | null) {
   return normalized ? normalized : undefined
 }
 
+function isPlaceholderName(value: string | undefined) {
+  return value?.trim().toLowerCase() === "student member"
+}
+
+function joinNameParts(firstName?: string, lastName?: string) {
+  const parts = [normalizeOptionalString(firstName), normalizeOptionalString(lastName)].filter(
+    Boolean
+  )
+
+  return parts.length ? parts.join(" ") : undefined
+}
+
+function titleCaseSegment(value: string) {
+  if (!value) {
+    return value
+  }
+
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+function nameFromEmail(email?: string) {
+  const normalizedEmail = normalizeOptionalString(email)
+
+  if (!normalizedEmail) {
+    return undefined
+  }
+
+  const localPart = normalizedEmail.split("@")[0]?.trim()
+
+  if (!localPart) {
+    return undefined
+  }
+
+  return localPart
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((segment) => titleCaseSegment(segment))
+    .join(" ")
+}
+
+function resolveDisplayName(options: {
+  name?: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  existingName?: string
+  existingFirstName?: string
+  existingLastName?: string
+  existingEmail?: string
+}) {
+  const directName = normalizeOptionalString(options.name)
+
+  if (directName && !isPlaceholderName(directName)) {
+    return directName
+  }
+
+  const providedParts = joinNameParts(options.firstName, options.lastName)
+
+  if (providedParts) {
+    return providedParts
+  }
+
+  const existingName = normalizeOptionalString(options.existingName)
+
+  if (existingName && !isPlaceholderName(existingName)) {
+    return existingName
+  }
+
+  const existingParts = joinNameParts(options.existingFirstName, options.existingLastName)
+
+  if (existingParts) {
+    return existingParts
+  }
+
+  const emailName = nameFromEmail(options.email) ?? nameFromEmail(options.existingEmail)
+
+  if (emailName) {
+    return emailName
+  }
+
+  return "Student member"
+}
+
+export function getDisplayNameFromUser(
+  user:
+    | {
+        name?: string
+        firstName?: string
+        lastName?: string
+        email?: string
+      }
+    | null
+    | undefined
+) {
+  if (!user) {
+    return "Student member"
+  }
+
+  return resolveDisplayName({
+    name: user.name,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+  })
+}
+
 function debugNameState(label: string, value: {
   externalId?: string
   profileName?: string
@@ -144,7 +250,7 @@ export async function upsertUser(
     isSeed,
   }: {
     externalId: string
-    name: string
+    name?: string
     firstName?: string
     lastName?: string
     email?: string
@@ -162,7 +268,16 @@ export async function upsertUser(
   const existingTokenIdentifier = normalizeOptionalString(existing?.tokenIdentifier)
   const patch: Insert<"users"> = {
     externalId,
-    name: normalizeOptionalString(name) ?? existingName ?? "Student member",
+    name: resolveDisplayName({
+      name,
+      firstName,
+      lastName,
+      email,
+      existingName,
+      existingFirstName,
+      existingLastName,
+      existingEmail,
+    }),
     firstName: normalizeOptionalString(firstName) ?? existingFirstName,
     lastName: normalizeOptionalString(lastName) ?? existingLastName,
     email: normalizeOptionalString(email) ?? existingEmail,
@@ -236,7 +351,7 @@ export async function getOrCreateCurrentUser(
 
   return await upsertUser(ctx, {
     externalId: identity.subject,
-    name: normalizeOptionalString(profile?.name) ?? tokenNameFallback ?? "Student member",
+    name: normalizeOptionalString(profile?.name) ?? tokenNameFallback,
     firstName: normalizeOptionalString(profile?.firstName) ?? tokenGivenName,
     lastName: normalizeOptionalString(profile?.lastName) ?? tokenFamilyName,
     email:

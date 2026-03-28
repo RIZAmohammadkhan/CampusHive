@@ -3,6 +3,7 @@ import { v } from "convex/values"
 
 import {
   assertActiveOrganization,
+  getDisplayNameFromUser,
   getWorkspaceViewer,
   requireIdentity,
   syncCurrentWorkspaceMember,
@@ -112,7 +113,7 @@ export const listActive = queryGeneric({
         const user = await ctx.db.get(entry.userId)
 
         return {
-          name: user?.name ?? "Student member",
+          name: getDisplayNameFromUser(user),
           route: entry.route,
           routeLabel: labelForRoute(entry.route),
           room: entry.room,

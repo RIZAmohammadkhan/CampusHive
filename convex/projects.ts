@@ -4,6 +4,7 @@ import { v } from "convex/values"
 import {
   assertActiveOrganization,
   assertWorkspaceAdmin,
+  getDisplayNameFromUser,
   getWorkspaceViewer,
   requireIdentity,
   syncCurrentWorkspaceMember,
@@ -91,7 +92,7 @@ async function listWorkspaceMembers(
 
       return {
         id: String(member.userId),
-        name: user?.name ?? "Student member",
+        name: getDisplayNameFromUser(user),
         imageUrl: user?.imageUrl ?? null,
         role: member.role,
       }
@@ -257,7 +258,7 @@ export const createTask = mutationGeneric({
     if (args.assigneeUserId) {
       await requireWorkspaceMemberUser(ctx, workspace._id, args.assigneeUserId)
       const assignee = await ctx.db.get(args.assigneeUserId)
-      ownerName = assignee?.name ?? ownerName
+      ownerName = getDisplayNameFromUser(assignee) ?? ownerName
     }
 
     const column = statusToColumn(args.status)
@@ -314,7 +315,7 @@ export const assignTask = mutationGeneric({
     if (args.assigneeUserId) {
       await requireWorkspaceMemberUser(ctx, workspace._id, args.assigneeUserId)
       const assignee = await ctx.db.get(args.assigneeUserId)
-      ownerName = assignee?.name ?? ownerName
+      ownerName = getDisplayNameFromUser(assignee) ?? ownerName
     }
 
     await ctx.db.patch(task._id, {

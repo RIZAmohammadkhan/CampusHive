@@ -3,6 +3,7 @@ import { v } from "convex/values"
 
 import {
   assertActiveOrganization,
+  getDisplayNameFromUser,
   getWorkspaceViewer,
   requireIdentity,
   syncCurrentWorkspaceMember,
@@ -149,7 +150,7 @@ export const directory = queryGeneric({
 
         return {
           id: String(member.userId),
-          name: user?.name ?? "Student member",
+          name: getDisplayNameFromUser(user),
           email: user?.email ?? null,
           imageUrl: user?.imageUrl ?? null,
           role: member.role,
@@ -278,7 +279,7 @@ export const memberProfile = queryGeneric({
 
     return {
       id: String(user._id),
-      name: user.name,
+      name: getDisplayNameFromUser(user),
       firstName: nameParts.firstName,
       lastName: nameParts.lastName,
       email: user.email ?? null,
