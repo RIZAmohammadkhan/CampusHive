@@ -2430,9 +2430,22 @@ function LiveClubPageInner({
           label: section.name,
         }))}
         threadLinksAction={
-          !conversation.isGeneral && conversation.canManage ? (
+          clubOps.canManage || (!conversation.isGeneral && conversation.canManage) ? (
             <div className="flex items-center gap-2">
-              {selectedSection ? (
+              {clubOps.canManage ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={handleOpenPollComposer}
+                  disabled={isPending && pendingAction === "create-club-poll"}
+                >
+                  <VoteIcon className="size-4" />
+                  Create poll
+                </Button>
+              ) : null}
+              {!conversation.isGeneral && selectedSection ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -2445,17 +2458,19 @@ function LiveClubPageInner({
                   Reply access
                 </Button>
               ) : null}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="rounded-full"
-                onClick={handleToggleSectionComposer}
-                disabled={isPending && pendingAction === "create-section"}
-              >
-                <PlusIcon className="size-4" />
-                Add channel
-              </Button>
+              {!conversation.isGeneral && conversation.canManage ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={handleToggleSectionComposer}
+                  disabled={isPending && pendingAction === "create-section"}
+                >
+                  <PlusIcon className="size-4" />
+                  Add channel
+                </Button>
+              ) : null}
             </div>
           ) : undefined
         }

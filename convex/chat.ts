@@ -691,6 +691,127 @@ async function findDirectMessageConversation(
   return null
 }
 
+function buildDirectMessageSlug(
+  leftUserId: Id<"users">,
+  rightUserId: Id<"users">
+) {
+  return `dm-${[String(leftUserId), String(rightUserId)].sort().join("-")}`
+}
+
+function buildDirectMessageDescription(otherUserName: string) {
+  return `Private conversation with ${otherUserName}.`
+}
+
+async function findReusableDirectMessageConversation(
+  ctx: ReadCtx | MutationCtx,
+  workspaceId: Id<"workspaces">,
+  leftUserId: Id<"users">,
+  rightUserId: Id<"users">
+) {
+  const directMessageSlug = buildDirectMessageSlug(leftUserId, rightUserId)
+  const bySlug = await findConversation(ctx, workspaceId, directMessageSlug)
+
+  if (bySlug?.kind === "dm") {
+    return bySlug
+  }
+
+  return await findDirectMessageConversation(ctx, workspaceId, leftUserId, rightUserId)
+}
+
+async function syncDirectMessageConversation(
+  ctx: MutationCtx,
+  {
+    workspace,
+    conversation,
+    currentUserId,
+    targetUserId,
+    targetUser,
+  }: {
+    workspace: Doc<"workspaces">
+    conversation: Doc<"conversations">
+    currentUserId: Id<"users">
+    targetUserId: Id<"users">
+    targetUser: Doc<"users"> | null
+  }
+) {
+  const nextName = getDisplayNameFromUser(targetUser)
+  const nextDescription = buildDirectMessageDescription(nextName)
+
+  if (
+    conversation.name !== nextName ||
+    conversation.description !== nextDescription ||
+    conversation.category !== "Direct message" ||
+    conversation.access !== "members"
+  ) {
+    await ctx.db.patch(conversation._id, {
+      name: nextName,
+      description: nextDescription,
+      category: "Direct message",
+      access: "members",
+    })
+
+    conversation = (await ctx.db.get(conversation._id)) ?? conversation
+  }
+
+  await upsertConversationMembership(ctx, {
+    workspaceId: workspace._id,
+    conversation,
+    userId: currentUserId,
+    role: "member",
+  })
+  await upsertConversationMembership(ctx, {
+    workspaceId: workspace._id,
+    conversation,
+    userId: targetUserId,
+    role: "member",
+  })
+
+  return conversation
+}
+
+async function getDirectMessagePeer(
+  ctx: ReadCtx | MutationCtx,
+  conversation: Doc<"conversations">,
+  currentUserId: Id<"users">
+) {
+  const memberships = await listConversationMembershipDocs(ctx, conversation._id)
+  const otherMembership =
+    memberships.find((membership) => membership.userId !== currentUserId) ??
+    memberships[0] ??
+    null
+  const otherUser = otherMembership ? await ctx.db.get(otherMembership.userId) : null
+
+  return {
+    memberships,
+    otherMembership,
+    otherUser,
+  }
+}
+
+async function listMessageSnapshots(
+  ctx: ReadCtx,
+  identitySubject: string,
+  messages: Doc<"messages">[]
+) {
+  return await Promise.all(
+    messages.map(async (message) => {
+      const author = await ctx.db.get(message.authorId)
+
+      return {
+        id: String(message._id),
+        body: message.body,
+        createdAt: message.createdAt,
+        author: {
+          id: String(message.authorId),
+          name: getDisplayNameFromUser(author),
+          imageUrl: author?.imageUrl ?? null,
+          isCurrentUser: author?.externalId === identitySubject,
+        },
+      }
+    })
+  )
+}
+
 async function listMentionableUsers(
   ctx: ReadCtx | MutationCtx,
   workspace: Doc<"workspaces">,
@@ -1592,6 +1713,215 @@ export const conversation = queryGeneric({
   },
 })
 
+export const listDirectMessages = queryGeneric({
+  args: {
+    workspaceSlug: v.string(),
+  },
+  handler: async (ctx: ReadCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      return {
+        directMessages: [],
+      }
+    }
+
+    const { currentUser } = await getWorkspaceViewer(ctx, workspace)
+
+    if (!currentUser) {
+      return {
+        directMessages: [],
+      }
+    }
+
+    const [conversations, messages, readStates] = await Promise.all([
+      ctx.db
+        .query("conversations")
+        .withIndex("by_workspace_and_slug", (q) => q.eq("workspaceId", workspace._id))
+        .collect(),
+      ctx.db
+        .query("messages")
+        .withIndex("by_workspace_and_created_at", (q) =>
+          q.eq("workspaceId", workspace._id)
+        )
+        .collect(),
+      ctx.db
+        .query("conversationReads")
+        .withIndex("by_user_and_workspace", (q) =>
+          q.eq("userId", currentUser._id).eq("workspaceId", workspace._id)
+        )
+        .collect(),
+    ])
+    const directMessages = conversations.filter((conversation) => conversation.kind === "dm")
+    const readAtByConversationId = new Map(
+      readStates.map((readState) => [String(readState.conversationId), readState.lastReadAt])
+    )
+    const statsByConversationId = new Map<
+      string,
+      {
+        lastMessageAt: number | null
+        preview: string
+        unreadCount: number
+      }
+    >()
+
+    for (const message of messages) {
+      const key = String(message.conversationId)
+      const readAt = readAtByConversationId.get(key) ?? 0
+      const existing = statsByConversationId.get(key)
+
+      statsByConversationId.set(key, {
+        lastMessageAt: Math.max(existing?.lastMessageAt ?? 0, message.createdAt),
+        preview: message.body,
+        unreadCount:
+          (existing?.unreadCount ?? 0) +
+          (message.authorId !== currentUser._id && message.createdAt > readAt ? 1 : 0),
+      })
+    }
+
+    const directMessageSnapshots = (
+      await Promise.all(
+        directMessages.map(async (conversation) => {
+          const membership = await getConversationMembership(
+            ctx,
+            conversation._id,
+            currentUser._id
+          )
+
+          if (!membership) {
+            return null
+          }
+
+          const { otherUser } = await getDirectMessagePeer(ctx, conversation, currentUser._id)
+          const stats = statsByConversationId.get(String(conversation._id))
+          const otherUserName = getDisplayNameFromUser(otherUser)
+
+          return {
+            id: String(conversation._id),
+            slug: conversation.slug,
+            name: otherUserName,
+            imageUrl: otherUser?.imageUrl ?? null,
+            preview: stats?.preview ?? "No messages yet",
+            lastMessageAt: stats?.lastMessageAt ?? conversation.createdAt ?? null,
+            unreadCount: stats?.unreadCount ?? 0,
+          }
+        })
+      )
+    )
+      .filter((conversation) => conversation !== null)
+      .sort((left, right) => (right.lastMessageAt ?? 0) - (left.lastMessageAt ?? 0))
+
+    return {
+      directMessages: directMessageSnapshots,
+    }
+  },
+})
+
+export const directMessageConversation = queryGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+  },
+  handler: async (ctx: ReadCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      return null
+    }
+
+    const { currentUser, role: workspaceRole } = await getWorkspaceViewer(ctx, workspace)
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo || convo.kind !== "dm") {
+      return null
+    }
+
+    const membership = currentUser
+      ? await getConversationMembership(ctx, convo._id, currentUser._id)
+      : null
+    const clubRole = membership ? resolveConversationMemberRole(convo, membership) : null
+    const canViewMessages = canAccessConversation({
+      kind: convo.kind,
+      access: resolveConversationAccess(convo),
+      workspaceRole,
+      clubRole,
+    })
+
+    if (!canViewMessages) {
+      return null
+    }
+
+    const members = currentUser
+      ? await listConversationMembers(ctx, convo, currentUser._id)
+      : []
+    const otherMember = members.find((member) => !member.isCurrentUser) ?? null
+
+    return {
+      slug: convo.slug,
+      name: otherMember?.name ?? convo.name,
+      description:
+        otherMember !== null
+          ? buildDirectMessageDescription(otherMember.name)
+          : convo.description,
+      canViewMessages,
+      canPostMessages: canViewMessages,
+      otherMember,
+    }
+  },
+})
+
+export const listDirectMessageMessages = queryGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+  },
+  handler: async (ctx: ReadCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      return []
+    }
+
+    const { currentUser, role: workspaceRole } = await getWorkspaceViewer(ctx, workspace)
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo || convo.kind !== "dm") {
+      return []
+    }
+
+    const membership = currentUser
+      ? await getConversationMembership(ctx, convo._id, currentUser._id)
+      : null
+    const clubRole = membership ? resolveConversationMemberRole(convo, membership) : null
+
+    if (
+      !canAccessConversation({
+        kind: convo.kind,
+        access: resolveConversationAccess(convo),
+        workspaceRole,
+        clubRole,
+      })
+    ) {
+      return []
+    }
+
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_conversation_and_created_at", (q) =>
+        q.eq("conversationId", convo._id)
+      )
+      .collect()
+
+    return await listMessageSnapshots(ctx, identity.subject, messages)
+  },
+})
+
 export const listMessages = queryGeneric({
   args: {
     workspaceSlug: v.string(),
@@ -1658,23 +1988,7 @@ export const listMessages = queryGeneric({
       })
     }
 
-    return await Promise.all(
-      scopedMessages.map(async (message) => {
-        const author = await ctx.db.get(message.authorId)
-
-        return {
-          id: String(message._id),
-          body: message.body,
-          createdAt: message.createdAt,
-          author: {
-            id: String(message.authorId),
-            name: getDisplayNameFromUser(author),
-            imageUrl: author?.imageUrl ?? null,
-            isCurrentUser: author?.externalId === identity.subject,
-          },
-        }
-        })
-    )
+    return await listMessageSnapshots(ctx, identity.subject, scopedMessages)
   },
 })
 
@@ -3480,7 +3794,8 @@ export const createDirectMessage = mutationGeneric({
       throw new Error("That member is not part of this campus space.")
     }
 
-    const existingConversation = await findDirectMessageConversation(
+    const targetUser = await ctx.db.get(args.userId)
+    const existingConversation = await findReusableDirectMessageConversation(
       ctx,
       workspace._id,
       user._id,
@@ -3488,18 +3803,25 @@ export const createDirectMessage = mutationGeneric({
     )
 
     if (existingConversation) {
+      const conversation = await syncDirectMessageConversation(ctx, {
+        workspace,
+        conversation: existingConversation,
+        currentUserId: user._id,
+        targetUserId: args.userId,
+        targetUser,
+      })
+
       return {
-        slug: existingConversation.slug,
+        slug: conversation.slug,
       }
     }
 
-    const targetUser = await ctx.db.get(args.userId)
-    const slug = `dm-${[String(user._id), String(args.userId)].sort().join("-")}`
+    const slug = buildDirectMessageSlug(user._id, args.userId)
     const conversationId = await ctx.db.insert("conversations", {
       workspaceId: workspace._id,
       slug,
       name: getDisplayNameFromUser(targetUser),
-      description: "Private conversation between workspace members.",
+      description: buildDirectMessageDescription(getDisplayNameFromUser(targetUser)),
       category: "Direct message",
       kind: "dm",
       access: "members",

@@ -13,7 +13,7 @@ import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { workspaceMessagePath, workspacePersonPath } from "@/lib/workspaces"
-import { channelsApi } from "@/modules/channels/api"
+import { messagesApi } from "@/modules/messages/api"
 import { PresenceDot } from "@/modules/presence/components/presence-dot"
 import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 import { workspaceApi } from "@/modules/workspace/api"
@@ -62,7 +62,7 @@ export function LivePeoplePage({ workspaceSlug }: { workspaceSlug: string }) {
 function LivePeoplePageInner({ workspaceSlug }: { workspaceSlug: string }) {
   const router = useRouter()
   const directory = useQuery(workspaceApi.directory, { workspaceSlug })
-  const createDirectMessage = useMutation(channelsApi.createDirectMessage)
+  const openDirectMessage = useMutation(messagesApi.openDirectMessage)
   const [search, setSearch] = useState("")
   const [pendingUserId, setPendingUserId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -100,7 +100,7 @@ function LivePeoplePageInner({ workspaceSlug }: { workspaceSlug: string }) {
 
     startTransition(async () => {
       try {
-        const result = await createDirectMessage({ workspaceSlug, userId })
+        const result = await openDirectMessage({ workspaceSlug, userId })
         router.push(workspaceMessagePath(workspaceSlug, result.slug))
       } catch (error) {
         toast.error(

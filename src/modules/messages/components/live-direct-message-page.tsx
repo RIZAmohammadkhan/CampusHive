@@ -12,8 +12,8 @@ import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { cn } from "@/lib/utils"
 import { workspaceMessagesPath, workspacePersonPath } from "@/lib/workspaces"
-import { channelsApi } from "@/modules/channels/api"
 import { MinimalChatThread } from "@/modules/channels/components/minimal-chat-thread"
+import { messagesApi } from "@/modules/messages/api"
 import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 
 export function LiveDirectMessagePage({
@@ -48,16 +48,16 @@ function LiveDirectMessagePageInner({
   workspaceSlug: string
   dmSlug: string
 }) {
-  const conversation = useQuery(channelsApi.conversation, {
+  const conversation = useQuery(messagesApi.directMessageConversation, {
     workspaceSlug,
     slug: dmSlug,
   })
-  const messages = useQuery(channelsApi.listMessages, {
+  const messages = useQuery(messagesApi.listDirectMessageMessages, {
     workspaceSlug,
     slug: dmSlug,
   })
-  const sendMessage = useMutation(channelsApi.sendMessage)
-  const markConversationRead = useMutation(channelsApi.markConversationRead)
+  const sendDirectMessage = useMutation(messagesApi.sendDirectMessage)
+  const markDirectMessageRead = useMutation(messagesApi.markDirectMessageRead)
   const [message, setMessage] = useState("")
   const [isPending, startTransition] = useTransition()
 
@@ -66,15 +66,15 @@ function LiveDirectMessagePageInner({
       return
     }
 
-    if (!conversation || conversation.kind !== "dm" || !conversation.canViewMessages) {
+    if (!conversation || !conversation.canViewMessages) {
       return
     }
 
-    void markConversationRead({
+    void markDirectMessageRead({
       workspaceSlug,
       slug: dmSlug,
     })
-  }, [conversation, dmSlug, markConversationRead, messages, workspaceSlug])
+  }, [conversation, dmSlug, markDirectMessageRead, messages, workspaceSlug])
 
   if (conversation === undefined || messages === undefined) {
     return (
@@ -85,7 +85,7 @@ function LiveDirectMessagePageInner({
     )
   }
 
-  if (!conversation || conversation.kind !== "dm") {
+  if (!conversation) {
     return (
       <div className="do-surface p-6 md:p-8 lg:p-10">
         <p className="do-eyebrow">Conversation missing</p>
@@ -96,8 +96,7 @@ function LiveDirectMessagePageInner({
     )
   }
 
-  const otherMember =
-    conversation.members.find((member) => !member.isCurrentUser) ?? null
+  const otherMember = conversation.otherMember
   const canPostMessages = conversation.canPostMessages ?? conversation.canViewMessages
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -110,7 +109,7 @@ function LiveDirectMessagePageInner({
 
     startTransition(async () => {
       try {
-        await sendMessage({
+        await sendDirectMessage({
           workspaceSlug,
           slug: dmSlug,
           body: trimmed,
@@ -125,7 +124,7 @@ function LiveDirectMessagePageInner({
   }
 
   const title = otherMember?.name ?? conversation.name
-  const subtitle = otherMember ? "Direct message" : undefined
+  const subtitle = otherMember ? conversation.description : undefined
 
   return (
     <MinimalChatThread

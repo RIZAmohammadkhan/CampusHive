@@ -304,6 +304,7 @@ export const memberProfile = queryGeneric({
 
 export const applyClerkMemberProfiles = internalMutationGeneric({
   args: {
+    clerkOrgId: v.string(),
     workspaceSlug: v.string(),
     profiles: v.array(
       v.object({
@@ -321,6 +322,10 @@ export const applyClerkMemberProfiles = internalMutationGeneric({
 
     if (!workspace) {
       return 0
+    }
+
+    if (workspace.clerkOrgId !== args.clerkOrgId) {
+      throw new Error("Active Clerk organization does not match this campus space.")
     }
 
     const members = await ctx.db

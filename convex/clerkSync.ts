@@ -4,7 +4,7 @@ import { actionGeneric } from "convex/server"
 import { v } from "convex/values"
 
 import { internal } from "./_generated/api"
-import { assertActiveOrganization, getActiveOrganization } from "./lib/auth"
+import { getActiveOrganization } from "./lib/auth"
 
 type ClerkEmailAddress = {
   id: string
@@ -68,7 +68,6 @@ export const repairMemberProfilesFromClerk = actionGeneric({
     }
 
     const activeOrganization = getActiveOrganization(identity)
-    assertActiveOrganization(identity, { slug: args.workspaceSlug })
 
     if (!activeOrganization.id) {
       throw new Error("Active Clerk organization is required for member sync.")
@@ -105,6 +104,7 @@ export const repairMemberProfilesFromClerk = actionGeneric({
     const repairedCount: number = await ctx.runMutation(
       internal.workspaces.applyClerkMemberProfiles,
       {
+        clerkOrgId: activeOrganization.id,
         workspaceSlug: args.workspaceSlug,
         profiles: users.map((user) => {
           const primaryEmail =

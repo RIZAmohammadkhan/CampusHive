@@ -205,7 +205,8 @@ export function assertActiveOrganization(
   if (
     expected.slug &&
     activeOrganization.slug &&
-    activeOrganization.slug !== expected.slug
+    activeOrganization.slug !== expected.slug &&
+    (!expected.clerkOrgId || !activeOrganization.id)
   ) {
     throw new Error("Active Clerk organization slug does not match this campus space.")
   }

@@ -13,8 +13,8 @@ import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { workspaceMessagePath, workspacePersonPath } from "@/lib/workspaces"
-import { channelsApi } from "@/modules/channels/api"
 import { formatRelativeActivity } from "@/modules/channels/components/conversation-utils"
+import { messagesApi } from "@/modules/messages/api"
 import { PresenceDot } from "@/modules/presence/components/presence-dot"
 import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 import { workspaceApi } from "@/modules/workspace/api"
@@ -52,14 +52,14 @@ export function LiveMessagesPage({ workspaceSlug }: { workspaceSlug: string }) {
 
 function LiveMessagesPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   const router = useRouter()
-  const channelsData = useQuery(channelsApi.listChannels, { workspaceSlug })
+  const directMessageData = useQuery(messagesApi.listDirectMessages, { workspaceSlug })
   const directoryData = useQuery(workspaceApi.directory, { workspaceSlug })
-  const createDirectMessage = useMutation(channelsApi.createDirectMessage)
+  const openDirectMessage = useMutation(messagesApi.openDirectMessage)
   const [search, setSearch] = useState("")
   const [pendingUserId, setPendingUserId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  if (channelsData === undefined || directoryData === undefined) {
+  if (directMessageData === undefined || directoryData === undefined) {
     return (
       <LiveLoadingState
         title="Loading messages"
@@ -68,7 +68,7 @@ function LiveMessagesPageInner({ workspaceSlug }: { workspaceSlug: string }) {
     )
   }
 
-  if (channelsData === null || directoryData === null) {
+  if (directoryData === null) {
     return (
       <LiveLoadingState
         title="Preparing messages"
@@ -78,7 +78,7 @@ function LiveMessagesPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   }
 
   const normalizedSearch = search.trim().toLowerCase()
-  const directMessages = channelsData.directMessages.filter((conversation) =>
+  const directMessages = directMessageData.directMessages.filter((conversation) =>
     matchesSearch([conversation.name, conversation.preview], normalizedSearch)
   )
   const members = directoryData.members.filter(
@@ -86,14 +86,14 @@ function LiveMessagesPageInner({ workspaceSlug }: { workspaceSlug: string }) {
       !member.isCurrentUser &&
       matchesSearch([member.name, member.email, member.role], normalizedSearch)
   )
-  const unreadCount = channelsData.directMessages.reduce(
+  const unreadCount = directMessageData.directMessages.reduce(
     (total, conversation) => total + conversation.unreadCount,
     0
   )
   const activeMemberCount = directoryData.members.filter(
     (member) => !member.isCurrentUser && member.isActive
   ).length
-  const threadCount = channelsData.directMessages.length
+  const threadCount = directMessageData.directMessages.length
   const threadSummary = unreadCount
     ? `${unreadCount} unread in ${threadCount} ${threadCount === 1 ? "thread" : "threads"}`
     : `${threadCount} ${threadCount === 1 ? "thread" : "threads"}`
@@ -103,7 +103,7 @@ function LiveMessagesPageInner({ workspaceSlug }: { workspaceSlug: string }) {
 
     startTransition(async () => {
       try {
-        const result = await createDirectMessage({ workspaceSlug, userId })
+        const result = await openDirectMessage({ workspaceSlug, userId })
         router.push(workspaceMessagePath(workspaceSlug, result.slug))
       } catch (error) {
         toast.error(

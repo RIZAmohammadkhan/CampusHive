@@ -17,8 +17,8 @@ import {
   workspaceMessagePath,
   workspacePeoplePath,
 } from "@/lib/workspaces"
-import { channelsApi } from "@/modules/channels/api"
 import { formatShortDate } from "@/modules/channels/components/conversation-utils"
+import { messagesApi } from "@/modules/messages/api"
 import { PresenceDot } from "@/modules/presence/components/presence-dot"
 import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 import { workspaceApi } from "@/modules/workspace/api"
@@ -107,7 +107,7 @@ function LiveMemberProfilePageInner({
   const router = useRouter()
   const profile = useQuery(workspaceApi.memberProfile, { workspaceSlug, userId })
   const directory = useQuery(workspaceApi.directory, { workspaceSlug })
-  const createDirectMessage = useMutation(channelsApi.createDirectMessage)
+  const openDirectMessage = useMutation(messagesApi.openDirectMessage)
 
   if (profile === undefined || directory === undefined) {
     return (
@@ -133,7 +133,7 @@ function LiveMemberProfilePageInner({
 
   const handleOpenMessage = async () => {
     try {
-      const result = await createDirectMessage({ workspaceSlug, userId })
+      const result = await openDirectMessage({ workspaceSlug, userId })
       router.push(workspaceMessagePath(workspaceSlug, result.slug))
     } catch (error) {
       toast.error(

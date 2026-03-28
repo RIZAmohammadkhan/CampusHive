@@ -48,12 +48,16 @@ export const heartbeat = mutationGeneric({
   },
   handler: async (ctx: MutationCtx, args) => {
     const identity = await requireIdentity(ctx)
-    assertActiveOrganization(identity, { slug: args.workspaceSlug })
     const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
 
     if (!workspace) {
       return null
     }
+
+    assertActiveOrganization(identity, {
+      clerkOrgId: workspace.clerkOrgId,
+      slug: workspace.slug,
+    })
 
     const { user } = await syncCurrentWorkspaceMember(ctx, workspace, {
       name: args.userName,
@@ -110,12 +114,16 @@ export const listActive = queryGeneric({
   },
   handler: async (ctx: ReadCtx, args) => {
     const identity = await requireIdentity(ctx)
-    assertActiveOrganization(identity, { slug: args.workspaceSlug })
     const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
 
     if (!workspace) {
       return []
     }
+
+    assertActiveOrganization(identity, {
+      clerkOrgId: workspace.clerkOrgId,
+      slug: workspace.slug,
+    })
 
     await getWorkspaceViewer(ctx, workspace)
 

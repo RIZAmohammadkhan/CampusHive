@@ -47,6 +47,13 @@ function buildUserSyncPayload(user: ReturnType<typeof useUser>["user"]) {
   }
 }
 
+function isActiveOrganizationMismatchError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.includes("Active Clerk organization")
+  )
+}
+
 function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
   const pathname = usePathname() ?? `/w/${workspaceSlug}`
   const { organization } = useOrganization()
@@ -58,15 +65,27 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
     workspaceApi.repairMemberProfilesFromClerk
   )
   const scopedPath = getWorkspaceScopedPath(pathname, workspaceSlug)
+  const activeOrganizationSlug = normalizeOptionalString(organization?.slug)
+  const isWorkspaceOrganizationReady =
+    Boolean(organization?.id) &&
+    Boolean(activeOrganizationSlug) &&
+    activeOrganizationSlug === workspaceSlug
 
   const runBootstrap = useEffectEvent(async () => {
-    if (!isLoaded || !isAuthenticated || !organization || !user) {
+    if (
+      !isLoaded ||
+      !isAuthenticated ||
+      !organization ||
+      !user ||
+      !isWorkspaceOrganizationReady ||
+      !activeOrganizationSlug
+    ) {
       return
     }
 
     const payload = {
       clerkOrgId: organization.id,
-      slug: organization.slug ?? workspaceSlug,
+      slug: activeOrganizationSlug,
       name: organization.name,
       ...buildUserSyncPayload(user),
     }
@@ -96,21 +115,34 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
       !isAuthenticated ||
       !organization ||
       !user ||
-      document.visibilityState === "hidden"
+      document.visibilityState === "hidden" ||
+      !isWorkspaceOrganizationReady
     ) {
       return
     }
 
-    await heartbeat({
-      workspaceSlug,
-      route: scopedPath,
-      room: getWorkspaceRoom(pathname, workspaceSlug),
-      ...buildUserSyncPayload(user),
-    })
+    try {
+      await heartbeat({
+        workspaceSlug,
+        route: scopedPath,
+        room: getWorkspaceRoom(pathname, workspaceSlug),
+        ...buildUserSyncPayload(user),
+      })
+    } catch (error) {
+      if (!isActiveOrganizationMismatchError(error)) {
+        throw error
+      }
+    }
   })
 
   const runMemberRepair = useEffectEvent(async () => {
-    if (!isLoaded || !isAuthenticated || !organization || !user) {
+    if (
+      !isLoaded ||
+      !isAuthenticated ||
+      !organization ||
+      !user ||
+      !isWorkspaceOrganizationReady
+    ) {
       return
     }
 
@@ -124,12 +156,16 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
       await repairMemberProfilesFromClerk({ workspaceSlug })
       window.sessionStorage.setItem(storageKey, "done")
     } catch (error) {
+      if (isActiveOrganizationMismatchError(error)) {
+        return
+      }
+
       console.error("[auth-debug] member repair failed", error)
     }
   })
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated) {
+    if (isLoading || !isAuthenticated || !isWorkspaceOrganizationReady) {
       return
     }
 
@@ -137,6 +173,8 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
     void runMemberRepair()
   }, [
     workspaceSlug,
+    activeOrganizationSlug,
+    isWorkspaceOrganizationReady,
     organization?.id,
     organization?.slug,
     organization?.name,
@@ -153,7 +191,13 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
   ])
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated || !organization || !user) {
+    if (
+      isLoading ||
+      !isAuthenticated ||
+      !organization ||
+      !user ||
+      !isWorkspaceOrganizationReady
+    ) {
       return
     }
 
@@ -175,7 +219,15 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
       window.removeEventListener("focus", onVisibilityChange)
       document.removeEventListener("visibilitychange", onVisibilityChange)
     }
-  }, [organization, user, scopedPath, workspaceSlug, isAuthenticated, isLoading])
+  }, [
+    organization,
+    user,
+    scopedPath,
+    workspaceSlug,
+    isAuthenticated,
+    isLoading,
+    isWorkspaceOrganizationReady,
+  ])
 
   return null
 }
