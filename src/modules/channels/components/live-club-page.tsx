@@ -1852,6 +1852,7 @@ function LiveClubPageInner({
   )
   const accessLabel = access === "public" ? "Open club" : "Approval required"
   const membershipSummary = membershipLabel(viewerMembershipState)
+  const showPollPanel = clubOps.polls.length > 0
 
   const runAction: ActionRunner = (
     key,
@@ -2419,7 +2420,7 @@ function LiveClubPageInner({
         headerAction={
           <Link
             href={overviewHref}
-            className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-fit")}
           >
             Overview
           </Link>
@@ -2628,39 +2629,41 @@ function LiveClubPageInner({
           ) : undefined
         }
         topContent={
-          <ChannelPollPanel
-            polls={clubOps.polls}
-            canManage={clubOps.canManage}
-            isPending={isPending}
-            pendingAction={pendingAction}
-            onCreatePoll={handleOpenPollComposer}
-            onToggleStatus={(pollId, nextStatus) =>
-              runAction(
-                `toggle-club-poll-${pollId}`,
-                () =>
-                  setClubPollStatus({
-                    workspaceSlug,
-                    slug: clubSlug,
-                    pollId,
-                    status: nextStatus,
-                  }),
-                nextStatus === "closed" ? "Poll closed" : "Poll reopened"
-              )
-            }
-            onVote={(pollId, optionId, action) =>
-              runAction(
-                `vote-club-poll-${pollId}`,
-                () =>
-                  voteOnClubPoll({
-                    workspaceSlug,
-                    slug: clubSlug,
-                    pollId,
-                    optionId,
-                  }),
-                action === "remove" ? "Vote removed" : "Vote recorded"
-              )
-            }
-          />
+          showPollPanel ? (
+            <ChannelPollPanel
+              polls={clubOps.polls}
+              canManage={clubOps.canManage}
+              isPending={isPending}
+              pendingAction={pendingAction}
+              onCreatePoll={handleOpenPollComposer}
+              onToggleStatus={(pollId, nextStatus) =>
+                runAction(
+                  `toggle-club-poll-${pollId}`,
+                  () =>
+                    setClubPollStatus({
+                      workspaceSlug,
+                      slug: clubSlug,
+                      pollId,
+                      status: nextStatus,
+                    }),
+                  nextStatus === "closed" ? "Poll closed" : "Poll reopened"
+                )
+              }
+              onVote={(pollId, optionId, action) =>
+                runAction(
+                  `vote-club-poll-${pollId}`,
+                  () =>
+                    voteOnClubPoll({
+                      workspaceSlug,
+                      slug: clubSlug,
+                      pollId,
+                      optionId,
+                    }),
+                  action === "remove" ? "Vote removed" : "Vote recorded"
+                )
+              }
+            />
+          ) : undefined
         }
         messages={messages as MessageData[]}
         canPostMessages={canPostMessages}
