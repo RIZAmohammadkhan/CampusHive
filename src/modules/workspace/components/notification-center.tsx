@@ -12,11 +12,13 @@ import {
   SparklesIcon,
 } from "lucide-react"
 
+import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { workspacePath } from "@/lib/workspaces"
 import {
   notificationsApi,
   type NotificationData,
 } from "@/modules/notifications/api"
+import { useConvexAuth } from "convex/react"
 
 type NotificationItem = NotificationData["items"][number]
 
@@ -69,16 +71,26 @@ export function NotificationCenter({
 }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const notifications = useQuery(notificationsApi.list, { workspaceSlug })
+  const enabled = useConvexConfigured()
+  const { isAuthenticated } = useConvexAuth()
+  const queryArgs = enabled && isAuthenticated ? { workspaceSlug } : "skip"
+  const notifications = useQuery(notificationsApi.list, queryArgs)
   const markAllRead = useMutation(notificationsApi.markAllRead)
 
   useEffect(() => {
-    if (!open || !notifications?.unreadCount) {
+    if (!enabled || !isAuthenticated || !open || !notifications?.unreadCount) {
       return
     }
 
     void markAllRead({ workspaceSlug })
-  }, [open, notifications?.unreadCount, markAllRead, workspaceSlug])
+  }, [
+    enabled,
+    isAuthenticated,
+    open,
+    notifications?.unreadCount,
+    markAllRead,
+    workspaceSlug,
+  ])
 
   useEffect(() => {
     if (!open) {
