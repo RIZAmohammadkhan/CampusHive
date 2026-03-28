@@ -1,4 +1,4 @@
-import { LiveCalendarPage } from "@/components/app/live-calendar-page"
+import { LiveCalendarPage } from "@/modules/events/components/live-calendar-page"
 
 export default async function CalendarPage({
   params,

@@ -4,15 +4,15 @@ import Link from "next/link"
 import { ArrowRightIcon, FolderKanbanIcon, MessageSquareTextIcon } from "lucide-react"
 import { useQuery } from "convex/react"
 
-import { PresenceDot } from "@/components/app/presence-dot"
-import { LiveLoadingState } from "@/components/app/live-loading-state"
 import { ConvexAuthGate } from "@/components/convex/convex-auth-gate"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
 import { buttonVariants } from "@/components/ui/button-variants"
-import { convexApi } from "@/lib/convex-api"
 import { cn } from "@/lib/utils"
 import { workspacePath } from "@/lib/workspaces"
+import { dashboardApi } from "@/modules/dashboard/api"
+import { PresenceDot } from "@/modules/presence/components/presence-dot"
+import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 
 function formatActivity(timestamp: number | null) {
   if (!timestamp) {
@@ -55,7 +55,7 @@ export function LiveOfficePage({ workspaceSlug }: { workspaceSlug: string }) {
 }
 
 function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
-  const data = useQuery(convexApi.dashboard.office, { workspaceSlug })
+  const data = useQuery(dashboardApi.office, { workspaceSlug })
 
   if (data === undefined || data === null) {
     return (
@@ -73,10 +73,10 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
           <div className="space-y-4 max-w-2xl">
             <p className="do-eyebrow">CampusHive Hub</p>
             <h2 className="do-heading">
-              Your central space for campus life.
+              Your college club command center.
             </h2>
             <p className="do-copy">
-              Everything you need in one place: active clubs, ongoing event tasks, and live community presence.
+              Start the day with club activity, live operations, and the communities students are actually showing up for.
             </p>
           </div>
 
@@ -140,6 +140,9 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[17px] font-medium text-cream">{channel.name}</p>
+                      <p className="mt-1 text-[11px] tracking-[0.12em] text-tan uppercase">
+                        {channel.category}
+                      </p>
                       <p className="mt-2 text-[13px] leading-6 text-tan line-clamp-2">
                         {channel.description}
                       </p>
@@ -175,7 +178,7 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
                           {member.name}
                         </p>
                         <p className="mt-1 text-[12px] leading-6 text-tan truncate">
-                          {member.role === "admin" ? "Institute admin" : "Student member"}
+                          {member.role === "admin" ? "College admin" : "Student member"}
                           {member.routeLabel ? ` · ${member.routeLabel}` : ""}
                         </p>
                       </div>

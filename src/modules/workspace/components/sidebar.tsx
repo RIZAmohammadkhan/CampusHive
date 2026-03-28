@@ -2,23 +2,17 @@
 
 import type { ReactNode } from "react"
 import { useOrganization } from "@clerk/nextjs"
-import {
-  CalendarDaysIcon,
-  FolderKanbanIcon,
-  LayoutGridIcon,
-  LibraryBigIcon,
-  MessageSquareTextIcon,
-  ScanLineIcon,
-} from "lucide-react"
 import { useConvexAuth, useQuery } from "convex/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-import { PresenceDot } from "@/components/app/presence-dot"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
-import { convexApi } from "@/lib/convex-api"
 import { cn } from "@/lib/utils"
 import { workspacePath } from "@/lib/workspaces"
+import { channelsApi } from "@/modules/channels/api"
+import { PresenceDot } from "@/modules/presence/components/presence-dot"
+import { workspaceApi } from "@/modules/workspace/api"
+import { workspaceSections } from "@/modules/workspace/sections"
 
 type SidebarLinkProps = {
   href: string
@@ -100,12 +94,12 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
   const { isAuthenticated } = useConvexAuth()
   const { organization } = useOrganization()
   const queryArgs = enabled && isAuthenticated ? { workspaceSlug } : "skip"
-  const channelsData = useQuery(convexApi.chat.listChannels, queryArgs)
-  const directoryData = useQuery(convexApi.workspaces.directory, queryArgs)
+  const channelsData = useQuery(channelsApi.listChannels, queryArgs)
+  const directoryData = useQuery(workspaceApi.directory, queryArgs)
   const workspaceName = organization?.name ?? workspaceSlug
   const workspaceInitial = workspaceName.charAt(0).toUpperCase()
   const roleLabel =
-    directoryData?.currentRole === "admin" ? "Institute admin" : "Student member"
+    directoryData?.currentRole === "admin" ? "College admin" : "Student member"
   const activeMembers =
     directoryData?.members.filter((member) => member.isActive).length ?? 0
 
@@ -132,48 +126,16 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
         </div>
 
         <nav className="grid grid-cols-2 gap-2 lg:grid-cols-1">
-          <SidebarLink
-            href={workspacePath(workspaceSlug)}
-            match="exact"
-            icon={<LayoutGridIcon className="size-4" />}
-          >
-            <span>Hub</span>
-          </SidebarLink>
-          <SidebarLink
-            href={workspacePath(workspaceSlug, "/channels")}
-            match="prefix"
-            icon={<MessageSquareTextIcon className="size-4" />}
-          >
-            <span>Clubs</span>
-          </SidebarLink>
-          <SidebarLink
-            href={workspacePath(workspaceSlug, "/projects")}
-            match="prefix"
-            icon={<FolderKanbanIcon className="size-4" />}
-          >
-            <span>Event Ops</span>
-          </SidebarLink>
-          <SidebarLink
-            href={workspacePath(workspaceSlug, "/calendar")}
-            match="prefix"
-            icon={<CalendarDaysIcon className="size-4" />}
-          >
-            <span>Events</span>
-          </SidebarLink>
-          <SidebarLink
-            href={workspacePath(workspaceSlug, "/docs")}
-            match="prefix"
-            icon={<LibraryBigIcon className="size-4" />}
-          >
-            <span>Resources</span>
-          </SidebarLink>
-          <SidebarLink
-            href={workspacePath(workspaceSlug, "/whiteboard")}
-            match="prefix"
-            icon={<ScanLineIcon className="size-4" />}
-          >
-            <span>Gate & Polls</span>
-          </SidebarLink>
+          {workspaceSections.map((section) => (
+            <SidebarLink
+              key={section.id}
+              href={workspacePath(workspaceSlug, section.href)}
+              match={section.match}
+              icon={<section.icon className="size-4" />}
+            >
+              <span>{section.navLabel}</span>
+            </SidebarLink>
+          ))}
         </nav>
 
         <div className="grid gap-4">
@@ -200,7 +162,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
                 ))
               ) : (
                 <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan">
-                  No club spaces yet. Institute admins can create the first one from
+                  No club spaces yet. College admins can create the first one from
                   the Clubs page.
                 </div>
               )}
@@ -229,7 +191,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
                         {member.name}
                       </span>
                       <span className="block text-[11px] leading-6 text-tan">
-                        {member.role === "admin" ? "Institute admin" : "Student member"}
+                        {member.role === "admin" ? "College admin" : "Student member"}
                         {member.isCurrentUser ? " · You" : ""}
                       </span>
                     </span>

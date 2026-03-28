@@ -62,6 +62,7 @@ export default defineSchema({
     slug: v.string(),
     name: v.string(),
     description: v.string(),
+    category: v.optional(v.string()),
     kind: conversationKind,
     access: v.optional(conversationAccess),
     createdByUserId: v.optional(v.id("users")),

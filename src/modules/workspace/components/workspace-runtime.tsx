@@ -6,36 +6,21 @@ import { usePathname } from "next/navigation"
 import { useEffect, useEffectEvent } from "react"
 
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
-import { convexApi } from "@/lib/convex-api"
-
-function scopedPathFor(pathname: string, workspaceSlug: string) {
-  const prefix = `/w/${workspaceSlug}`
-
-  if (!pathname.startsWith(prefix)) {
-    return "/"
-  }
-
-  return pathname.slice(prefix.length) || "/"
-}
-
-function roomForPath(pathname: string) {
-  if (pathname === "/") return "hub"
-  if (pathname.startsWith("/channels")) return "clubs"
-  if (pathname.startsWith("/projects")) return "event-ops"
-  if (pathname.startsWith("/docs")) return "resources"
-  if (pathname.startsWith("/whiteboard")) return "gate-ops"
-  if (pathname.startsWith("/calendar")) return "events"
-  return "campus"
-}
+import { presenceApi } from "@/modules/presence/api"
+import { workspaceApi } from "@/modules/workspace/api"
+import {
+  getWorkspaceRoom,
+  getWorkspaceScopedPath,
+} from "@/modules/workspace/sections"
 
 function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
   const pathname = usePathname() ?? `/w/${workspaceSlug}`
   const { organization } = useOrganization()
   const { user, isLoaded } = useUser()
   const { isAuthenticated, isLoading } = useConvexAuth()
-  const bootstrapWorkspace = useMutation(convexApi.workspaces.bootstrap)
-  const heartbeat = useMutation(convexApi.presence.heartbeat)
-  const scopedPath = scopedPathFor(pathname, workspaceSlug)
+  const bootstrapWorkspace = useMutation(workspaceApi.bootstrap)
+  const heartbeat = useMutation(presenceApi.heartbeat)
+  const scopedPath = getWorkspaceScopedPath(pathname, workspaceSlug)
 
   const runBootstrap = useEffectEvent(async () => {
     if (!isLoaded || !isAuthenticated || !organization || !user) {
@@ -67,7 +52,7 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
     await heartbeat({
       workspaceSlug,
       route: scopedPath,
-      room: roomForPath(scopedPath),
+      room: getWorkspaceRoom(pathname, workspaceSlug),
     })
   })
 

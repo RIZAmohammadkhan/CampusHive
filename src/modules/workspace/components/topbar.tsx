@@ -6,62 +6,9 @@ import { useConvexAuth, useQuery } from "convex/react"
 import { usePathname } from "next/navigation"
 
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
-import { convexApi } from "@/lib/convex-api"
 import { WORKSPACE_HOME_PATTERN } from "@/lib/workspaces"
-
-const contentForPath = (pathname: string, workspaceSlug: string) => {
-  const workspacePrefix = `/w/${workspaceSlug}`
-  const scopedPath = pathname.startsWith(workspacePrefix)
-    ? pathname.slice(workspacePrefix.length) || "/"
-    : pathname
-
-  if (scopedPath === "/") {
-    return {
-      title: "Campus Hub",
-      subtitle: "See communities, event operations, and live campus activity in one place.",
-    }
-  }
-
-  if (scopedPath.startsWith("/channels")) {
-    return {
-      title: "Club Spaces",
-      subtitle: "Browse communities, open shared channels, and keep announcements visible.",
-    }
-  }
-
-  if (scopedPath.startsWith("/projects")) {
-    return {
-      title: "Event Ops",
-      subtitle: "Assign volunteer tasks, track ownership, and react before small slips become event-day chaos.",
-    }
-  }
-
-  if (scopedPath.startsWith("/docs")) {
-    return {
-      title: "Resources",
-      subtitle: "Keep playbooks, club notes, and reusable campus context easy to find.",
-    }
-  }
-
-  if (scopedPath.startsWith("/whiteboard")) {
-    return {
-      title: "Gate & Polls",
-      subtitle: "Operational views for passes, scan desks, decisions, and quiet notifications.",
-    }
-  }
-
-  if (scopedPath.startsWith("/calendar")) {
-    return {
-      title: "Events",
-      subtitle: "Shared calendars for meetings, campus moments, and RSVP-ready planning.",
-    }
-  }
-
-  return {
-    title: "Campus Space",
-    subtitle: "Live campus data is loaded for the current organization.",
-  }
-}
+import { workspaceApi } from "@/modules/workspace/api"
+import { getWorkspaceSection } from "@/modules/workspace/sections"
 
 type AppTopbarProps = {
   workspaceSlug: string
@@ -72,8 +19,11 @@ export function AppTopbar({ workspaceSlug }: AppTopbarProps) {
   const enabled = useConvexConfigured()
   const { isAuthenticated } = useConvexAuth()
   const queryArgs = enabled && isAuthenticated ? { workspaceSlug } : "skip"
-  const viewer = useQuery(convexApi.workspaces.viewer, queryArgs)
-  const content = contentForPath(pathname, workspaceSlug)
+  const viewer = useQuery(workspaceApi.viewer, queryArgs)
+  const content = getWorkspaceSection(pathname, workspaceSlug) ?? {
+    title: "Campus Space",
+    subtitle: "Live campus data is loaded for the current organization.",
+  }
   const { organization } = useOrganization()
   const today = new Intl.DateTimeFormat("en-US", {
     weekday: "short",
@@ -82,7 +32,7 @@ export function AppTopbar({ workspaceSlug }: AppTopbarProps) {
   }).format(new Date())
   const roleLabel =
     viewer?.role === "admin"
-      ? "Institute admin"
+      ? "College admin"
       : viewer?.role === "member"
         ? "Student member"
         : "Campus access"

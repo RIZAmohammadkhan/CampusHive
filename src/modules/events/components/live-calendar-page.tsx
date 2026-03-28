@@ -5,13 +5,13 @@ import { CalendarDaysIcon, MapPinIcon, MonitorIcon, PlusIcon } from "lucide-reac
 import { useMutation, useQuery } from "convex/react"
 import { toast } from "sonner"
 
-import { LiveLoadingState } from "@/components/app/live-loading-state"
 import { ConvexAuthGate } from "@/components/convex/convex-auth-gate"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { convexApi } from "@/lib/convex-api"
+import { eventsApi } from "@/modules/events/api"
+import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 
 const eventTypes = [
   "Club meeting",
@@ -44,8 +44,8 @@ export function LiveCalendarPage({ workspaceSlug }: { workspaceSlug: string }) {
 }
 
 function LiveCalendarPageInner({ workspaceSlug }: { workspaceSlug: string }) {
-  const data = useQuery(convexApi.events.schedule, { workspaceSlug })
-  const createEvent = useMutation(convexApi.events.createEvent)
+  const data = useQuery(eventsApi.schedule, { workspaceSlug })
+  const createEvent = useMutation(eventsApi.createEvent)
   const [title, setTitle] = useState("")
   const [type, setType] = useState<(typeof eventTypes)[number]>("Club meeting")
   const [date, setDate] = useState("")

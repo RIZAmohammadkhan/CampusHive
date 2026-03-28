@@ -4,6 +4,7 @@ const DEFAULT_CHANNEL = {
   slug: "general",
   name: "Campus Feed",
   description: "Shared campus updates, introductions, and must-see announcements.",
+  category: "Campus Updates",
 }
 
 const LEGACY_FILLER_CHANNELS = new Set([
@@ -105,6 +106,7 @@ export async function ensureDefaultChannel(
     await ctx.db.patch(existing._id, {
       name: DEFAULT_CHANNEL.name,
       description: DEFAULT_CHANNEL.description,
+      category: DEFAULT_CHANNEL.category,
       kind: "channel",
       access: "public",
       createdByUserId: existing.createdByUserId ?? createdByUserId,
@@ -118,6 +120,7 @@ export async function ensureDefaultChannel(
     slug: DEFAULT_CHANNEL.slug,
     name: DEFAULT_CHANNEL.name,
     description: DEFAULT_CHANNEL.description,
+    category: DEFAULT_CHANNEL.category,
     kind: "channel",
     access: "public",
     createdByUserId,

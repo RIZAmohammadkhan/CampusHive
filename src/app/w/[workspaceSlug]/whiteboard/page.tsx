@@ -1,4 +1,4 @@
-import { LiveWhiteboardPage } from "@/components/app/live-whiteboard-page"
+import { LiveWhiteboardPage } from "@/modules/whiteboard/components/live-whiteboard-page"
 
 export default async function WhiteboardPage({
   params,

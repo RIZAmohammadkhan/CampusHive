@@ -15,14 +15,14 @@ import {
 import { useMutation, useQuery } from "convex/react"
 import { toast } from "sonner"
 
-import { LiveLoadingState } from "@/components/app/live-loading-state"
-import { PresenceDot } from "@/components/app/presence-dot"
 import { ConvexAuthGate } from "@/components/convex/convex-auth-gate"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { convexApi } from "@/lib/convex-api"
+import { PresenceDot } from "@/modules/presence/components/presence-dot"
+import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
+import { whiteboardApi } from "@/modules/whiteboard/api"
 
 const textareaClassName =
   "min-h-28 w-full rounded-2xl border border-hairline bg-field/90 px-3 py-3 text-[13px] leading-6 text-parchment outline-none transition-colors duration-150 ease-out placeholder:text-tan focus:border-ring focus:ring-3 focus:ring-ring/30"
@@ -64,13 +64,13 @@ function LiveWhiteboardPageInner({
 }: {
   workspaceSlug: string
 }) {
-  const data = useQuery(convexApi.whiteboard.controlRoom, { workspaceSlug })
-  const createGatePass = useMutation(convexApi.whiteboard.createGatePass)
-  const scanGatePass = useMutation(convexApi.whiteboard.scanGatePass)
-  const resetGatePass = useMutation(convexApi.whiteboard.resetGatePass)
-  const createPoll = useMutation(convexApi.whiteboard.createPoll)
-  const voteOnPoll = useMutation(convexApi.whiteboard.voteOnPoll)
-  const setPollStatus = useMutation(convexApi.whiteboard.setPollStatus)
+  const data = useQuery(whiteboardApi.controlRoom, { workspaceSlug })
+  const createGatePass = useMutation(whiteboardApi.createGatePass)
+  const scanGatePass = useMutation(whiteboardApi.scanGatePass)
+  const resetGatePass = useMutation(whiteboardApi.resetGatePass)
+  const createPoll = useMutation(whiteboardApi.createPoll)
+  const voteOnPoll = useMutation(whiteboardApi.voteOnPoll)
+  const setPollStatus = useMutation(whiteboardApi.setPollStatus)
   const [attendeeName, setAttendeeName] = useState("")
   const [attendeeEmail, setAttendeeEmail] = useState("")
   const [gateNote, setGateNote] = useState("")

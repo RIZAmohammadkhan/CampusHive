@@ -3,8 +3,8 @@
 import type { ReactNode } from "react"
 import { useConvexAuth } from "convex/react"
 
-import { LiveLoadingState } from "@/components/app/live-loading-state"
 import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
+import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 
 export function ConvexAuthGate({ children }: { children: ReactNode }) {
   const { isLoading, isAuthenticated } = useConvexAuth()

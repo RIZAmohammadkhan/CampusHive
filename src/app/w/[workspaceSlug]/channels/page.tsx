@@ -1,4 +1,4 @@
-import { LiveChannelsPage } from "@/components/app/live-channels-page"
+import { LiveChannelsPage } from "@/modules/channels/components/live-channels-page"
 
 export default async function ChannelsPage({
   params,

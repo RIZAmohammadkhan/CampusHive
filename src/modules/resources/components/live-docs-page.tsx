@@ -5,13 +5,13 @@ import { FileTextIcon, PlusIcon, VoteIcon } from "lucide-react"
 import { useMutation, useQuery } from "convex/react"
 import { toast } from "sonner"
 
-import { LiveLoadingState } from "@/components/app/live-loading-state"
 import { ConvexAuthGate } from "@/components/convex/convex-auth-gate"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { convexApi } from "@/lib/convex-api"
+import { resourcesApi } from "@/modules/resources/api"
+import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 
 const textareaClassName =
   "min-h-28 w-full rounded-2xl border border-hairline bg-field/90 px-3 py-3 text-[13px] leading-6 text-parchment outline-none transition-colors duration-150 ease-out placeholder:text-tan focus:border-ring focus:ring-3 focus:ring-ring/30"
@@ -43,8 +43,8 @@ export function LiveDocsPage({ workspaceSlug }: { workspaceSlug: string }) {
 }
 
 function LiveDocsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
-  const data = useQuery(convexApi.resources.library, { workspaceSlug })
-  const createResource = useMutation(convexApi.resources.createResource)
+  const data = useQuery(resourcesApi.library, { workspaceSlug })
+  const createResource = useMutation(resourcesApi.createResource)
   const [title, setTitle] = useState("")
   const [summary, setSummary] = useState("")
   const [tag, setTag] = useState("Playbook")

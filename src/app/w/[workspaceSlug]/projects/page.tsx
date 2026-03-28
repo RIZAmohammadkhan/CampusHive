@@ -1,4 +1,4 @@
-import { LiveProjectsPage } from "@/components/app/live-projects-page"
+import { LiveProjectsPage } from "@/modules/projects/components/live-projects-page"
 
 export default async function ProjectsPage({
   params,

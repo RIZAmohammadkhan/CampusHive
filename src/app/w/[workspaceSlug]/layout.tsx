@@ -2,10 +2,10 @@ import type { ReactNode } from "react"
 import { auth } from "@clerk/nextjs/server"
 import { notFound, redirect } from "next/navigation"
 
-import { AppSidebar } from "@/components/app/sidebar"
-import { AppTopbar } from "@/components/app/topbar"
-import { WorkspaceRuntime } from "@/components/app/workspace-runtime"
 import { INVITE_NEEDED_PATH } from "@/lib/workspaces"
+import { AppSidebar } from "@/modules/workspace/components/sidebar"
+import { AppTopbar } from "@/modules/workspace/components/topbar"
+import { WorkspaceRuntime } from "@/modules/workspace/components/workspace-runtime"
 
 export default async function AppLayout({
   children,

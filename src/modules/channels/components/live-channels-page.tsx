@@ -13,9 +13,6 @@ import { useMutation, useQuery } from "convex/react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
-import { PresenceDot } from "@/components/app/presence-dot"
-import { LiveLoadingState } from "@/components/app/live-loading-state"
-import { MemberProfileSheet } from "@/components/app/member-profile-sheet"
 import { ConvexAuthGate } from "@/components/convex/convex-auth-gate"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
@@ -23,8 +20,29 @@ import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { convexApi } from "@/lib/convex-api"
 import { workspacePath } from "@/lib/workspaces"
+import { channelsApi } from "@/modules/channels/api"
+import { PresenceDot } from "@/modules/presence/components/presence-dot"
+import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
+import { MemberProfileSheet } from "@/modules/workspace/components/member-profile-sheet"
+import { workspaceApi } from "@/modules/workspace/api"
+
+const clubCategories = [
+  "Academic",
+  "Technology",
+  "Cultural",
+  "Sports",
+  "Media",
+  "Student Government",
+  "Community Service",
+  "General Club",
+] as const
+const accessOptions = [
+  { id: "public", label: "Open club" },
+  { id: "members", label: "Approval required" },
+] as const
+const selectClassName =
+  "h-10 rounded-2xl border border-hairline bg-field/90 px-3 text-[13px] text-parchment outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/30"
 
 function formatActivity(timestamp: number | null) {
   if (!timestamp) {
@@ -80,12 +98,15 @@ export function LiveChannelsPage({ workspaceSlug }: { workspaceSlug: string }) {
 
 function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   const router = useRouter()
-  const channelsData = useQuery(convexApi.chat.listChannels, { workspaceSlug })
-  const directoryData = useQuery(convexApi.workspaces.directory, { workspaceSlug })
-  const createChannel = useMutation(convexApi.chat.createChannel)
-  const requestToJoin = useMutation(convexApi.chat.requestToJoin)
+  const channelsData = useQuery(channelsApi.listChannels, { workspaceSlug })
+  const directoryData = useQuery(workspaceApi.directory, { workspaceSlug })
+  const createChannel = useMutation(channelsApi.createChannel)
+  const joinOpenClub = useMutation(channelsApi.joinOpenClub)
+  const requestToJoin = useMutation(channelsApi.requestToJoin)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [category, setCategory] = useState<(typeof clubCategories)[number]>("General Club")
+  const [access, setAccess] = useState<"public" | "members">("members")
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
   const [pendingJoinSlug, setPendingJoinSlug] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -118,6 +139,7 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
     return {
       ...channel,
       access,
+      category: channel.category,
       memberCount:
         channel.memberCount ?? (access === "public" ? directoryData.members.length : 0),
       membershipState,
@@ -126,6 +148,11 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
         (access === "public" ||
           membershipState === "admin" ||
           membershipState === "member"),
+      canJoin:
+        channel.canJoin ??
+        (channel.slug !== "general" &&
+          access === "public" &&
+          membershipState === "public"),
       canRequestToJoin:
         channel.canRequestToJoin ??
         (access === "members" &&
@@ -144,16 +171,35 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
           workspaceSlug,
           name,
           description: description || undefined,
+          category,
+          access,
         })
 
         setName("")
         setDescription("")
+        setCategory("General Club")
+        setAccess("members")
         toast.success("Club space created")
         router.push(workspacePath(workspaceSlug, `/channels/${result.slug}`))
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to create club space."
         )
+      }
+    })
+  }
+
+  const handleJoinOpenClub = (slug: string) => {
+    setPendingJoinSlug(slug)
+
+    startTransition(async () => {
+      try {
+        await joinOpenClub({ workspaceSlug, slug })
+        toast.success("Club joined")
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to join club.")
+      } finally {
+        setPendingJoinSlug(null)
       }
     })
   }
@@ -183,18 +229,18 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
             <div className="space-y-4">
               <p className="do-eyebrow">Club Discovery & Joining</p>
               <h2 className="do-heading max-w-3xl">
-                Every community on campus needs a place students can actually find.
+                Every college club needs a clear front door, not another hidden chat link.
               </h2>
               <p className="max-w-2xl do-copy">
-                Campus Feed stays open to everyone, while club spaces now support
-                real membership and join requests instead of one giant campus chat.
+                Students can discover clubs by category, join open communities instantly,
+                and request access when a leadership team wants approvals.
               </p>
             </div>
 
             <div className="do-panel p-5">
               <div className="flex items-center gap-2 text-[11px] tracking-[0.12em] text-tan uppercase">
                 <ShieldCheckIcon className="size-4 text-sage" />
-                {isAdmin ? "Institute admin controls" : "Student view"}
+                {isAdmin ? "College admin controls" : "Student view"}
               </div>
               <form onSubmit={handleCreateChannel} className="mt-4 space-y-3">
                 <Input
@@ -209,6 +255,34 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                   placeholder="What is this community for?"
                   disabled={!isAdmin || isPending}
                 />
+                <select
+                  value={category}
+                  onChange={(event) =>
+                    setCategory(event.target.value as (typeof clubCategories)[number])
+                  }
+                  className={selectClassName}
+                  disabled={!isAdmin || isPending}
+                >
+                  {clubCategories.map((clubCategory) => (
+                    <option key={clubCategory} value={clubCategory}>
+                      {clubCategory}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={access}
+                  onChange={(event) =>
+                    setAccess(event.target.value as "public" | "members")
+                  }
+                  className={selectClassName}
+                  disabled={!isAdmin || isPending}
+                >
+                  {accessOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
                 <Button type="submit" disabled={!isAdmin || isPending || !name.trim()}>
                   <PlusIcon className="size-4" />
                   Create club space
@@ -216,8 +290,8 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
               </form>
               {!isAdmin ? (
                 <p className="mt-3 text-[12px] leading-6 text-tan">
-                  Institute admins create club spaces. Students can browse clubs,
-                  request membership, and join once approved.
+                  College admins can launch club spaces. Students can join open clubs
+                  immediately or request access to approval-based clubs.
                 </p>
               ) : null}
             </div>
@@ -232,13 +306,14 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-[18px] font-medium text-cream">{channel.name}</p>
+                      <span className="do-pill">{channel.category}</span>
                       {channel.access === "members" ? (
                         <span className="do-pill">
                           <LockKeyholeIcon className="size-3.5" />
-                          Members
+                          Approval
                         </span>
                       ) : (
-                        <span className="do-pill">Campus-wide</span>
+                        <span className="do-pill">Open</span>
                       )}
                       <span className="do-pill">{membershipLabel(channel.membershipState)}</span>
                     </div>
@@ -265,12 +340,20 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                     >
                       View club
                     </Link>
-                    {channel.canOpen ? (
+                    {channel.canJoin ? (
+                      <Button
+                        size="sm"
+                        disabled={isPending && pendingJoinSlug === channel.slug}
+                        onClick={() => handleJoinOpenClub(channel.slug)}
+                      >
+                        Join club
+                      </Button>
+                    ) : channel.canOpen ? (
                       <Link
                         href={workspacePath(workspaceSlug, `/channels/${channel.slug}`)}
                         className={cn(buttonVariants({ size: "sm" }))}
                       >
-                        Open chat
+                        Open club
                         <ArrowRightIcon className="size-4" />
                       </Link>
                     ) : channel.canRequestToJoin ? (
@@ -290,8 +373,8 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
             ))
           ) : (
             <div className="do-panel p-6 text-[13px] leading-6 text-tan">
-              No club spaces exist yet. Create the first one to start a visible,
-              searchable community layer for this campus.
+              No clubs exist yet. Create the first one to give students a place to
+              discover, join, and organize around a real community.
             </div>
           )}
         </div>
@@ -333,7 +416,7 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                         {member.name}
                       </span>
                       <span className="block text-[12px] leading-6 text-tan">
-                        {member.role === "admin" ? "Institute admin" : "Student member"}
+                        {member.role === "admin" ? "College admin" : "Student member"}
                         {member.isCurrentUser ? " · You" : ""}
                       </span>
                     </span>
@@ -346,7 +429,7 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
               ))
             ) : (
               <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan">
-                Students appear here after they sign into the campus.
+                Students appear here after they sign into the college workspace.
               </div>
             )}
           </div>

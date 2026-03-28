@@ -23,18 +23,18 @@ import {
 import { useMutation, useQuery } from "convex/react"
 import { toast } from "sonner"
 
-import { LiveLoadingState } from "@/components/app/live-loading-state"
-import { MemberProfileSheet } from "@/components/app/member-profile-sheet"
-import { TicketQr } from "@/components/app/ticket-qr"
 import { ConvexAuthGate } from "@/components/convex/convex-auth-gate"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Input } from "@/components/ui/input"
-import { convexApi } from "@/lib/convex-api"
 import { cn } from "@/lib/utils"
 import { workspacePath } from "@/lib/workspaces"
+import { channelsApi } from "@/modules/channels/api"
+import { TicketQr } from "@/modules/channels/components/ticket-qr"
+import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
+import { MemberProfileSheet } from "@/modules/workspace/components/member-profile-sheet"
 
 const selectClassName =
   "h-10 rounded-2xl border border-hairline bg-field/90 px-3 text-[13px] text-parchment outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/30"
@@ -74,7 +74,7 @@ function membershipLabel(
     | "notMember"
 ) {
   if (membershipState === "public") return "Campus-wide access"
-  if (membershipState === "admin") return "Institute admin access"
+  if (membershipState === "admin") return "College admin access"
   if (membershipState === "owner") return "Club owner"
   if (membershipState === "officer") return "Club officer"
   if (membershipState === "member") return "Joined member"
@@ -120,31 +120,32 @@ function LiveChannelPageInner({
   workspaceSlug: string
   slug: string
 }) {
-  const conversation = useQuery(convexApi.chat.conversation, {
+  const conversation = useQuery(channelsApi.conversation, {
     workspaceSlug,
     slug,
   })
-  const messages = useQuery(convexApi.chat.listMessages, {
+  const messages = useQuery(channelsApi.listMessages, {
     workspaceSlug,
     slug,
   })
-  const clubOps = useQuery(convexApi.chat.clubOperations, {
+  const clubOps = useQuery(channelsApi.clubOperations, {
     workspaceSlug,
     slug,
   })
-  const sendMessage = useMutation(convexApi.chat.sendMessage)
-  const requestToJoin = useMutation(convexApi.chat.requestToJoin)
-  const reviewJoinRequest = useMutation(convexApi.chat.reviewJoinRequest)
-  const leaveChannel = useMutation(convexApi.chat.leaveChannel)
-  const removeMember = useMutation(convexApi.chat.removeMember)
-  const setMemberRole = useMutation(convexApi.chat.setMemberRole)
-  const createClubEvent = useMutation(convexApi.chat.createClubEvent)
-  const joinClubEvent = useMutation(convexApi.chat.joinClubEvent)
-  const checkInClubTicket = useMutation(convexApi.chat.checkInClubTicket)
-  const resetClubTicket = useMutation(convexApi.chat.resetClubTicket)
-  const createClubPoll = useMutation(convexApi.chat.createClubPoll)
-  const voteOnClubPoll = useMutation(convexApi.chat.voteOnClubPoll)
-  const setClubPollStatus = useMutation(convexApi.chat.setClubPollStatus)
+  const sendMessage = useMutation(channelsApi.sendMessage)
+  const joinOpenClub = useMutation(channelsApi.joinOpenClub)
+  const requestToJoin = useMutation(channelsApi.requestToJoin)
+  const reviewJoinRequest = useMutation(channelsApi.reviewJoinRequest)
+  const leaveChannel = useMutation(channelsApi.leaveChannel)
+  const removeMember = useMutation(channelsApi.removeMember)
+  const setMemberRole = useMutation(channelsApi.setMemberRole)
+  const createClubEvent = useMutation(channelsApi.createClubEvent)
+  const joinClubEvent = useMutation(channelsApi.joinClubEvent)
+  const checkInClubTicket = useMutation(channelsApi.checkInClubTicket)
+  const resetClubTicket = useMutation(channelsApi.resetClubTicket)
+  const createClubPoll = useMutation(channelsApi.createClubPoll)
+  const voteOnClubPoll = useMutation(channelsApi.voteOnClubPoll)
+  const setClubPollStatus = useMutation(channelsApi.setClubPollStatus)
   const [message, setMessage] = useState("")
   const [eventTitle, setEventTitle] = useState("")
   const [eventSummary, setEventSummary] = useState("")
@@ -176,7 +177,7 @@ function LiveChannelPageInner({
       <div className="do-surface p-6 md:p-8 lg:p-10">
         <p className="do-eyebrow">Conversation missing</p>
         <h2 className="mt-3 do-subheading">
-          This club space is not available in the campus.
+          This club space is not available in this college workspace.
         </h2>
         <p className="mt-4 max-w-2xl text-[14px] leading-7 text-tan">
           It may have been removed, or you may be following an outdated link.
@@ -194,6 +195,7 @@ function LiveChannelPageInner({
   const canViewMessages =
     conversation.canViewMessages ?? (access === "public" || conversation.canManage)
   const canPostMessages = conversation.canPostMessages ?? canViewMessages
+  const canJoin = conversation.canJoin ?? false
   const canRequestToJoin = conversation.canRequestToJoin ?? false
   const canLeave = conversation.canLeave ?? false
   const canEditRoles = conversation.canEditRoles ?? false
@@ -321,13 +323,14 @@ function LiveChannelPageInner({
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="do-eyebrow">Club Space</p>
+                  <span className="do-pill">{conversation.category}</span>
                   {access === "members" ? (
                     <span className="do-pill">
                       <LockKeyholeIcon className="size-3.5" />
-                      Members
+                      Approval
                     </span>
                   ) : (
-                    <span className="do-pill">Campus-wide</span>
+                    <span className="do-pill">Open club</span>
                   )}
                   <span className="do-pill">
                     {membershipLabel(viewerMembershipState)}
@@ -365,7 +368,20 @@ function LiveChannelPageInner({
                 here automatically.
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
-                {canRequestToJoin ? (
+                {canJoin ? (
+                  <Button
+                    disabled={isPending && pendingAction === "join-open-club"}
+                    onClick={() =>
+                      runAction(
+                        "join-open-club",
+                        () => joinOpenClub({ workspaceSlug, slug }),
+                        "You joined the club"
+                      )
+                    }
+                  >
+                    Join club
+                  </Button>
+                ) : canRequestToJoin ? (
                   <Button
                     disabled={isPending && pendingAction === "request-to-join"}
                     onClick={() =>
@@ -944,23 +960,38 @@ function LiveChannelPageInner({
           <div className="mt-5 space-y-3 text-[13px] leading-6 text-tan">
             <div className="rounded-2xl border border-hairline bg-surface/55 p-4">
               {access === "public"
-                ? "Campus Feed remains readable and postable for the whole campus, so major updates never disappear behind private club membership."
-                : "This club keeps its discussion, event tickets, and polls inside a real member list. Students can request access, admins can approve, and members can leave when needed."}
+                ? "Open clubs stay discoverable for the whole college. Students can follow them, jump into the discussion, and still see who has formally joined."
+                : "Approval-based clubs keep discussion, event tickets, and polls inside a real member list. Students can request access, leads can approve, and members can leave when needed."}
             </div>
             {conversation.canManage ? (
               <div className="rounded-2xl border border-hairline bg-surface/55 p-4">
                 <span className="inline-flex items-center gap-2 text-parchment">
                   <ShieldCheckIcon className="size-4 text-sage" />
-                  {canEditRoles
-                    ? "You can review requests, manage members, events, and update club roles here."
-                    : "You can review requests and manage members in this club space."}
+                  {access === "members"
+                    ? canEditRoles
+                      ? "You can review requests, manage the roster, publish events, and update club roles here."
+                      : "You can review requests and manage this club's activity here."
+                    : "You can publish events, run polls, and guide the activity of this open club here."}
                 </span>
               </div>
             ) : null}
             {viewerClubRole ? (
               <span className="do-pill">Your role: {clubRoleLabel(viewerClubRole)}</span>
             ) : null}
-            {canRequestToJoin ? (
+            {canJoin ? (
+              <Button
+                disabled={isPending && pendingAction === "join-open-club-side"}
+                onClick={() =>
+                  runAction(
+                    "join-open-club-side",
+                    () => joinOpenClub({ workspaceSlug, slug }),
+                    "You joined the club"
+                  )
+                }
+              >
+                Join club
+              </Button>
+            ) : canRequestToJoin ? (
               <Button
                 disabled={isPending && pendingAction === "request-to-join-side"}
                 onClick={() =>
@@ -995,7 +1026,7 @@ function LiveChannelPageInner({
           </div>
         </section>
 
-        {access === "members" ? (
+        {!conversation.isGeneral ? (
           <section className="do-panel p-5">
             <p className="do-eyebrow">Members</p>
             <h3 className="mt-2 text-[20px] font-medium text-cream">
@@ -1031,7 +1062,7 @@ function LiveChannelPageInner({
                           </p>
                         </div>
                       </button>
-                      {conversation.canManage ? (
+                      {conversation.canManage && access === "members" ? (
                         <div className="flex min-w-[148px] flex-col gap-2">
                           {canEditRoles ? (
                             <select

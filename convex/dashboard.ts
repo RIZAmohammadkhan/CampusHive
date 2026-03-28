@@ -118,6 +118,9 @@ export const office = queryGeneric({
           slug: channel.slug,
           name: channel.name,
           description: channel.description,
+          category:
+            channel.category?.trim() ??
+            (channel.slug === "general" ? "Campus Updates" : "General Club"),
           messageCount: stats?.count ?? 0,
           lastMessageAt: stats?.lastMessageAt ?? channel.createdAt ?? null,
         }

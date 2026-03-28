@@ -1,14 +1,15 @@
 # CampusHive
 
-CampusHive is a connected digital campus for college clubs, events, and student community operations.
+CampusHive is a live college club operating system for discovery, club membership, events, and student operations.
 
-This refactor keeps the existing working Clerk + Convex foundation, but reshapes the product from a generic digital office into a campus community platform.
+This refactor keeps the existing Clerk + Convex foundation, but reshapes the product around the real student and organizer workflow inside a college club ecosystem.
 
 ## What This Build Includes
 
 - Campus-scoped auth and routing with Clerk Organizations
 - A Campus Hub dashboard at `/w/[workspaceSlug]`
 - Club spaces with realtime Convex-backed chat
+- Club categories plus open-club and approval-based joining flows
 - Club-native event tickets with QR generation and attendee check-in
 - An Event Ops board with assignees and live task status updates
 - A shared events calendar with admin event creation
@@ -54,7 +55,7 @@ NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 
 ### 3. Configure Clerk
 
-CampusHive currently treats each Clerk Organization as one campus space.
+CampusHive currently treats each Clerk Organization as one college workspace.
 
 Required settings:
 
@@ -103,9 +104,30 @@ Open `http://localhost:3000`.
 - `/w/[workspaceSlug]/docs`
 - `/w/[workspaceSlug]/whiteboard`
 
+## Module Layout
+
+The app is now organized under `src/modules` so teams can work mostly inside a single domain folder instead of editing shared buckets.
+
+- `src/modules/workspace`: app shell, workspace bootstrap, member directory, profile sheet, shared section registry
+- `src/modules/dashboard`: Campus Hub page and dashboard Convex contract
+- `src/modules/channels`: club discovery, channel detail, club tickets, and chat Convex contract
+- `src/modules/projects`: Event Ops board and task mutations
+- `src/modules/events`: calendar page and event creation
+- `src/modules/resources`: resource library page and resource mutations
+- `src/modules/whiteboard`: gate control room and polling flows
+- `src/modules/presence`: presence API and presence UI primitives
+- `src/modules/shared`: cross-module UI primitives like loading states
+- `src/lib/convex-api.ts`: compatibility barrel that now re-exports module-owned APIs instead of defining everything in one file
+
+This means parallel work usually stays inside one module:
+
+- feature UI in `src/modules/<feature>/components`
+- feature Convex references in `src/modules/<feature>/api.ts`
+- workspace chrome metadata in each feature `manifest.ts`
+
 ## Product Mapping
 
-- Clerk Organization = campus
+- Clerk Organization = college workspace
 - Channel = club space
 - Task board = event operations
 - Calendar = events and meetings
@@ -127,14 +149,17 @@ npm run convex:deploy
 
 - `src/app/layout.tsx`: global app layout and metadata
 - `src/app/globals.css`: CampusHive design tokens and shared surface styles
-- `src/components/app/sidebar.tsx`: campus navigation
-- `src/components/app/topbar.tsx`: page framing and campus controls
-- `src/components/app/live-office-page.tsx`: Campus Hub
-- `src/components/app/live-channels-page.tsx`: club discovery and creation
-- `src/components/app/live-projects-page.tsx`: Event Ops board
-- `src/components/app/live-calendar-page.tsx`: shared events calendar
-- `src/components/app/live-docs-page.tsx`: resources library
-- `src/components/app/live-whiteboard-page.tsx`: gate and polling control room
+- `src/modules/workspace/components/sidebar.tsx`: campus navigation driven by module manifests
+- `src/modules/workspace/components/topbar.tsx`: page framing and campus controls
+- `src/modules/workspace/sections.ts`: shared section registry for nav, titles, and runtime rooms
+- `src/modules/dashboard/components/live-office-page.tsx`: Campus Hub
+- `src/modules/channels/components/live-channels-page.tsx`: club discovery and creation
+- `src/modules/channels/components/live-channel-page.tsx`: club detail, messages, tickets, and polls
+- `src/modules/projects/components/live-projects-page.tsx`: Event Ops board
+- `src/modules/events/components/live-calendar-page.tsx`: shared events calendar
+- `src/modules/resources/components/live-docs-page.tsx`: resources library
+- `src/modules/whiteboard/components/live-whiteboard-page.tsx`: gate and polling control room
+- `src/lib/convex-api.ts`: compatibility barrel over module-owned Convex contracts
 - `convex/workspaces.ts`: campus bootstrap and directory sync
 - `convex/chat.ts`: club-space conversations
 - `convex/projects.ts`: event task board logic
@@ -146,9 +171,10 @@ npm run convex:deploy
 
 Implemented now:
 
-- Campus-focused branding and design system
+- College-focused branding and design system
 - Campus Hub shell and navigation
 - Club spaces with realtime chat
+- Club categories plus open-club and approval-based join flows
 - Club event creation, QR ticket claiming, and attendee check-in inside each club
 - Event task creation, assignment, and live status changes
 - Shared event creation and grouped calendar view
@@ -158,10 +184,9 @@ Implemented now:
 
 Not wired yet:
 
-- Actual join-request flows for clubs
 - Camera-based QR generation and scanning
 - Automatic virtual room creation
-- Fine-grained manager/officer permission layers beyond current admin/member roles
+- Fine-grained role layers beyond current workspace admin/member plus club owner/officer/member
 
 ## Verification
 

@@ -86,6 +86,28 @@ function fallbackNameForSlug(slug: string) {
     .join(" ")
 }
 
+function normalizeClubCategory(value: string | undefined) {
+  const trimmed = value?.trim() ?? ""
+
+  if (!trimmed) {
+    return "General Club"
+  }
+
+  return trimmed.replace(/\s+/g, " ").slice(0, 40)
+}
+
+function categoryForConversation(conversation: Doc<"conversations">) {
+  if (conversation.category?.trim()) {
+    return conversation.category.trim()
+  }
+
+  if (conversation.slug === "general") {
+    return "Campus Updates"
+  }
+
+  return "General Club"
+}
+
 function resolveConversationAccess(conversation: Doc<"conversations">): ChannelAccess {
   return conversation.access ?? (conversation.slug === "general" ? "public" : "members")
 }
@@ -243,10 +265,6 @@ function membershipStateForViewer({
   clubRole: ClubRole | null
   hasPendingRequest: boolean
 }): MembershipState {
-  if (access === "public") {
-    return "public"
-  }
-
   if (workspaceRole === "admin") {
     return "admin"
   }
@@ -261,6 +279,10 @@ function membershipStateForViewer({
 
   if (clubRole === "member") {
     return "member"
+  }
+
+  if (access === "public") {
+    return "public"
   }
 
   if (hasPendingRequest) {
@@ -507,9 +529,13 @@ export const listChannels = queryGeneric({
           slug: channel.slug,
           name: channel.name,
           description: channel.description,
+          category: categoryForConversation(channel),
+          isGeneral: channel.slug === "general",
           access,
           memberCount:
-            access === "public" ? workspaceMembers.length : conversationMembers.length,
+            channel.slug === "general"
+              ? workspaceMembers.length
+              : conversationMembers.length,
           messageCount: stats?.count ?? 0,
           lastMessageAt: stats?.lastMessageAt ?? channel.createdAt ?? null,
           membershipState: membershipStateForViewer({
@@ -528,6 +554,11 @@ export const listChannels = queryGeneric({
             workspaceRole,
             clubRole: viewerClubRole,
           }),
+          canJoin:
+            channel.slug !== "general" &&
+            access === "public" &&
+            workspaceRole !== "admin" &&
+            viewerClubRole === null,
           canRequestToJoin:
             access === "members" &&
             workspaceRole !== "admin" &&
@@ -586,17 +617,21 @@ export const conversation = queryGeneric({
       workspaceRole,
       clubRole: viewerClubRole,
     })
-    const canEditRoles = canEditConversationRoles({
-      workspaceRole,
-      clubRole: viewerClubRole,
-    })
+    const canEditRoles =
+      access === "members" &&
+      canEditConversationRoles({
+        workspaceRole,
+        clubRole: viewerClubRole,
+      })
     const canViewMessages = canAccessConversation({
       access,
       workspaceRole,
       clubRole: viewerClubRole,
     })
     const members =
-      access === "members" ? await listConversationMembers(ctx, convo, currentUser?._id) : []
+      convo.slug === "general"
+        ? []
+        : await listConversationMembers(ctx, convo, currentUser?._id)
     const pendingRequests =
       canManage && access === "members"
         ? await listPendingJoinRequests(ctx, convo._id)
@@ -606,12 +641,14 @@ export const conversation = queryGeneric({
       slug: convo.slug,
       name: convo.name,
       description: convo.description,
+      category: categoryForConversation(convo),
+      isGeneral: convo.slug === "general",
       kind: convo.kind,
       access,
       canManage,
       canEditRoles,
       viewerClubRole,
-      memberCount: access === "public" ? null : members.length,
+      memberCount: convo.slug === "general" ? null : members.length,
       viewerMembershipState: membershipStateForViewer({
         access,
         workspaceRole,
@@ -620,13 +657,20 @@ export const conversation = queryGeneric({
       }),
       canViewMessages,
       canPostMessages: canViewMessages,
+      canJoin:
+        convo.slug !== "general" &&
+        access === "public" &&
+        workspaceRole !== "admin" &&
+        viewerClubRole === null,
       canRequestToJoin:
         access === "members" &&
         workspaceRole !== "admin" &&
         !viewerClubRole &&
         joinRequest?.status !== "pending",
       canLeave:
-        access === "members" && workspaceRole !== "admin" && viewerClubRole !== null,
+        convo.slug !== "general" &&
+        viewerClubRole !== null &&
+        (access === "public" || workspaceRole !== "admin"),
       members,
       pendingRequests,
     }
@@ -1325,6 +1369,8 @@ export const createChannel = mutationGeneric({
     workspaceSlug: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
+    category: v.optional(v.string()),
+    access: v.optional(v.union(v.literal("public"), v.literal("members"))),
   },
   handler: async (ctx: MutationCtx, args) => {
     const identity = await requireIdentity(ctx)
@@ -1340,6 +1386,8 @@ export const createChannel = mutationGeneric({
 
     const name = normalizeChannelName(args.name)
     const description = args.description?.trim() ?? ""
+    const category = normalizeClubCategory(args.category)
+    const access = args.access ?? "members"
 
     if (name.length < 2) {
       throw new Error("Club space name must be at least 2 characters long.")
@@ -1366,8 +1414,9 @@ export const createChannel = mutationGeneric({
       name,
       description:
         description || `Announcements and discussion for ${fallbackNameForSlug(slug)}.`,
+      category,
       kind: "channel",
-      access: "members",
+      access,
       createdByUserId: user._id,
       createdAt: Date.now(),
     })
@@ -1385,6 +1434,56 @@ export const createChannel = mutationGeneric({
       channelId: String(conversationId),
       slug,
     }
+  },
+})
+
+export const joinOpenClub = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const { role: workspaceRole, user } = await syncCurrentWorkspaceMember(ctx, workspace)
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    if (convo.slug === "general") {
+      throw new Error("Campus Feed is already open to everyone.")
+    }
+
+    if (resolveConversationAccess(convo) !== "public") {
+      throw new Error("This club needs an approval request instead of direct joining.")
+    }
+
+    if (workspaceRole === "admin") {
+      throw new Error("College admins already have access to every club space.")
+    }
+
+    const existingMembership = await getConversationMembership(ctx, convo._id, user._id)
+
+    if (existingMembership) {
+      throw new Error("You already joined this club.")
+    }
+
+    await upsertConversationMembership(ctx, {
+      workspaceId: workspace._id,
+      conversation: convo,
+      userId: user._id,
+      role: "member",
+    })
+
+    return null
   },
 })
 
@@ -1410,11 +1509,11 @@ export const requestToJoin = mutationGeneric({
     }
 
     if (resolveConversationAccess(convo) === "public") {
-      throw new Error("This campus channel is already open to everyone.")
+      throw new Error("This club is open. Join it instantly instead of sending a request.")
     }
 
     if (workspaceRole === "admin") {
-      throw new Error("Institute admins already have access to every club space.")
+      throw new Error("College admins already have access to every club space.")
     }
 
     const existingMembership = await getConversationMembership(ctx, convo._id, user._id)
@@ -1474,7 +1573,7 @@ export const reviewJoinRequest = mutationGeneric({
     }
 
     if (resolveConversationAccess(convo) === "public") {
-      throw new Error("This campus channel does not use join requests.")
+      throw new Error("This open club does not use join requests.")
     }
 
     const manager = await requireConversationManager(ctx, workspace, convo)
@@ -1528,12 +1627,12 @@ export const leaveChannel = mutationGeneric({
       throw new Error("Club space not found.")
     }
 
-    if (resolveConversationAccess(convo) === "public") {
-      throw new Error("This campus channel does not require membership.")
+    if (convo.slug === "general") {
+      throw new Error("Campus Feed cannot be left.")
     }
 
-    if (workspaceRole === "admin") {
-      throw new Error("Institute admins keep access across all club spaces.")
+    if (resolveConversationAccess(convo) === "members" && workspaceRole === "admin") {
+      throw new Error("College admins keep access across all private club spaces.")
     }
 
     const membership = await getConversationMembership(ctx, convo._id, user._id)
@@ -1575,7 +1674,7 @@ export const removeMember = mutationGeneric({
     }
 
     if (resolveConversationAccess(convo) === "public") {
-      throw new Error("This campus channel does not use club membership.")
+      throw new Error("Open clubs do not use managed removals.")
     }
 
     const manager = await requireConversationManager(ctx, workspace, convo)
@@ -1629,7 +1728,7 @@ export const setMemberRole = mutationGeneric({
     }
 
     if (resolveConversationAccess(convo) === "public") {
-      throw new Error("This campus channel does not use club roles.")
+      throw new Error("Open clubs do not use managed club roles.")
     }
 
     const editor = await requireConversationRoleEditor(ctx, workspace, convo)

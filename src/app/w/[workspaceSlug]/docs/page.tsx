@@ -1,4 +1,4 @@
-import { LiveDocsPage } from "@/components/app/live-docs-page"
+import { LiveDocsPage } from "@/modules/resources/components/live-docs-page"
 
 export default async function DocsPage({
   params,

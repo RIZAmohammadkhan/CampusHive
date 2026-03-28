@@ -1,4 +1,4 @@
-import { LiveOfficePage } from "@/components/app/live-office-page"
+import { LiveOfficePage } from "@/modules/dashboard/components/live-office-page"
 
 export default async function OfficePage({
   params,

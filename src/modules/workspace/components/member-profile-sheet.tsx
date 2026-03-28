@@ -4,7 +4,7 @@ import { XIcon } from "lucide-react"
 import { useQuery } from "convex/react"
 
 import { Button } from "@/components/ui/button"
-import { convexApi } from "@/lib/convex-api"
+import { workspaceApi } from "@/modules/workspace/api"
 
 function formatDate(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
@@ -26,7 +26,7 @@ export function MemberProfileSheet({
   onClose: () => void
 }) {
   const profile = useQuery(
-    convexApi.workspaces.memberProfile,
+    workspaceApi.memberProfile,
     open && userId ? { workspaceSlug, userId } : "skip"
   )
 
@@ -67,7 +67,7 @@ export function MemberProfileSheet({
                     <span className="do-pill">{profile.workspaceName}</span>
                     <span className="do-pill">
                       {profile.workspaceRole === "admin"
-                        ? "Institute admin"
+                        ? "College admin"
                         : "Student member"}
                     </span>
                   </div>

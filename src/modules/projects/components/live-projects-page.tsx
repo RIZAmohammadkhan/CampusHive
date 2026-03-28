@@ -10,13 +10,13 @@ import {
 import { useMutation, useQuery } from "convex/react"
 import { toast } from "sonner"
 
-import { LiveLoadingState } from "@/components/app/live-loading-state"
 import { ConvexAuthGate } from "@/components/convex/convex-auth-gate"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { convexApi } from "@/lib/convex-api"
+import { projectsApi } from "@/modules/projects/api"
+import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 
 const statIcons = [SparklesIcon, Clock3Icon, TriangleAlertIcon]
 const selectClassName =
@@ -55,10 +55,10 @@ export function LiveProjectsPage({ workspaceSlug }: { workspaceSlug: string }) {
 }
 
 function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
-  const data = useQuery(convexApi.projects.board, { workspaceSlug })
-  const createTask = useMutation(convexApi.projects.createTask)
-  const assignTask = useMutation(convexApi.projects.assignTask)
-  const updateTaskStatus = useMutation(convexApi.projects.updateTaskStatus)
+  const data = useQuery(projectsApi.board, { workspaceSlug })
+  const createTask = useMutation(projectsApi.createTask)
+  const assignTask = useMutation(projectsApi.assignTask)
+  const updateTaskStatus = useMutation(projectsApi.updateTaskStatus)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [status, setStatus] = useState<
