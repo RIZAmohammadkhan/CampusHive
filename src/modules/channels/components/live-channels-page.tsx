@@ -8,8 +8,6 @@ import {
   MessageSquareTextIcon,
   PlusIcon,
   SearchIcon,
-  ShieldCheckIcon,
-  SparklesIcon,
   UsersIcon,
   XIcon,
 } from "lucide-react"
@@ -434,25 +432,15 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
 
   return (
     <div className="space-y-6">
-      <section className="do-surface p-6 md:p-8">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="do-surface overflow-hidden p-6 md:p-8">
+        <div className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
           <div className="space-y-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <p className="do-eyebrow">Club hub</p>
-                <h2 className="mt-2 do-subheading">
-                  Clubs
-                </h2>
-                <p className="mt-3 max-w-3xl text-[13px] leading-6 text-tan">
-                  Browse, join, and open clubs.
-                </p>
-              </div>
-              {isAdmin ? (
-                <Button size="lg" onClick={() => setShowCreatePanel(true)}>
-                  <PlusIcon className="size-4" />
-                  New club
-                </Button>
-              ) : null}
+            <div>
+              <p className="do-eyebrow">Clubs</p>
+              <h2 className="mt-2 do-subheading">Browse and join clubs.</h2>
+              <p className="mt-3 max-w-2xl text-[14px] leading-7 text-tan">
+                Find active clubs, open club pages, and manage memberships in one place.
+              </p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
@@ -479,60 +467,52 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
               </div>
             </div>
 
-            <div className="do-panel p-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="relative flex-1">
-                  <SearchIcon className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-tan" />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search clubs by name, topic, or category"
-                    className="pl-10"
-                  />
-                </div>
-                {campusFeed ? (
-                  <Link
-                    href={workspacePath(workspaceSlug, `/channels/${campusFeed.slug}`)}
-                    className={cn(buttonVariants({ variant: "outline" }))}
-                  >
-                    Open campus feed
-                    <ArrowRightIcon className="size-4" />
-                  </Link>
-                ) : null}
-              </div>
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-tan" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search clubs"
+                className="pl-10"
+              />
             </div>
           </div>
 
-          <aside className="do-panel p-5">
-            <div className="flex items-center gap-2 text-[11px] tracking-[0.14em] text-tan uppercase">
-              {isAdmin ? (
-                <ShieldCheckIcon className="size-4 text-sage" />
-              ) : (
-                <SparklesIcon className="size-4 text-amber-300" />
-              )}
-              {isAdmin ? "Admin controls" : "How it works"}
-            </div>
-
-            {isAdmin ? (
+          <div className="do-card p-5">
+            <p className="do-eyebrow">{campusFeed ? "Campus feed" : "Clubs"}</p>
+            {campusFeed ? (
               <>
-                <h3 className="mt-4 text-[22px] font-medium text-cream">
-                  Create clubs
+                <h3 className="mt-3 text-[20px] font-medium text-cream">
+                  {campusFeed.name}
                 </h3>
-                <p className="mt-2 text-[13px] leading-6 text-tan">
-                  Add a club and open it right away.
+                <p className="mt-3 text-[13px] leading-6 text-tan">
+                  Shared updates for everyone.
                 </p>
               </>
             ) : (
-              <>
-                <h3 className="mt-4 text-[22px] font-medium text-cream">
-                  Find clubs
-                </h3>
-                <p className="mt-2 text-[13px] leading-6 text-tan">
-                  Open clubs instantly or request access to private ones.
-                </p>
-              </>
+              <p className="mt-3 text-[13px] leading-6 text-tan">
+                Club directory.
+              </p>
             )}
-          </aside>
+
+            <div className="mt-5 space-y-2">
+              {campusFeed ? (
+                <Link
+                  href={workspacePath(workspaceSlug, `/channels/${campusFeed.slug}`)}
+                  className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+                >
+                  Open feed
+                  <ArrowRightIcon className="size-4" />
+                </Link>
+              ) : null}
+              {isAdmin ? (
+                <Button className="w-full" onClick={() => setShowCreatePanel(true)}>
+                  <PlusIcon className="size-4" />
+                  Add club
+                </Button>
+              ) : null}
+            </div>
+          </div>
         </div>
       </section>
 
