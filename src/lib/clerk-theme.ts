@@ -15,11 +15,11 @@ export const clerkAppearance = {
     colorWarning: "var(--gold)",
     colorForeground: "var(--parchment)",
     colorMutedForeground: "var(--tan)",
-    colorBackground: "rgba(20, 20, 22, 0.96)",
-    colorInput: "rgba(15, 15, 17, 0.96)",
+    colorBackground: "rgba(13, 13, 15, 0.96)",
+    colorInput: "rgba(13, 13, 15, 0.96)",
     colorInputForeground: "var(--parchment)",
-    colorBorder: "rgba(255, 255, 255, 0.06)",
-    colorRing: "rgba(201, 132, 122, 0.4)",
+    colorBorder: "rgba(255, 255, 255, 0.05)",
+    colorRing: "rgba(217, 149, 111, 0.45)",
     colorNeutral: "rgba(232, 220, 200, 0.92)",
     colorShadow: "#000000",
     fontFamily: "var(--font-geist-sans)",
@@ -31,7 +31,7 @@ export const clerkAppearance = {
   elements: {
     rootBox: "w-full",
     cardBox: "w-full shadow-none",
-    card: "relative overflow-hidden rounded-[10px] border border-hairline bg-surface/94 shadow-[0_24px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/8 before:content-['']",
+    card: "relative overflow-hidden rounded-[10px] border border-hairline bg-surface/95 shadow-[0_28px_80px_rgba(0,0,0,0.38)] backdrop-blur-xl before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/7 before:content-['']",
     headerTitle: "font-sans text-[1.85rem] leading-tight text-cream",
     headerSubtitle: "mt-2 text-[13px] leading-6 text-tan",
     socialButtonsBlockButton:
@@ -45,7 +45,7 @@ export const clerkAppearance = {
     formFieldInput:
       "h-11 rounded-[8px] border border-white/8 bg-field px-3 text-[13px] text-parchment shadow-none placeholder:text-tan transition-colors hover:bg-field focus:bg-field",
     formButtonPrimary:
-      "h-11 rounded-[8px] border border-[rgba(201,132,122,0.18)] bg-[linear-gradient(135deg,var(--rose),var(--gold))] text-primary-foreground shadow-none transition-all duration-150 hover:-translate-y-0.5",
+      "h-11 rounded-[8px] border border-[rgba(217,149,111,0.2)] bg-[linear-gradient(135deg,#d9956f,#d4af7f)] text-primary-foreground shadow-none transition-all duration-150 hover:-translate-y-0.5",
     footerActionText: "text-tan",
     footerActionLink: "font-medium text-gold transition-colors hover:text-gold-hover",
     formResendCodeLink:
@@ -60,7 +60,7 @@ export const clerkAppearance = {
     userButtonTrigger:
       "rounded-[8px] border border-hairline bg-surface/85 p-1 backdrop-blur transition-colors hover:border-white/10 hover:bg-elevated",
     userButtonPopoverCard:
-      "rounded-[10px] border border-hairline bg-elevated/95 shadow-[0_18px_60px_rgba(0,0,0,0.34)] backdrop-blur-xl",
+      "rounded-[10px] border border-hairline bg-elevated/96 shadow-[0_20px_64px_rgba(0,0,0,0.38)] backdrop-blur-xl",
     userButtonPopoverActionButton:
       "rounded-[8px] text-parchment transition-colors hover:bg-field",
     userButtonPopoverFooter: "border-t border-hairline",
@@ -68,7 +68,7 @@ export const clerkAppearance = {
       "h-10 rounded-[8px] border border-hairline bg-surface/85 px-3 backdrop-blur transition-colors hover:border-white/10 hover:bg-elevated",
     organizationSwitcherTriggerIcon: "text-tan",
     organizationSwitcherPopoverCard:
-      "rounded-[10px] border border-hairline bg-elevated/95 shadow-[0_18px_60px_rgba(0,0,0,0.34)] backdrop-blur-xl",
+      "rounded-[10px] border border-hairline bg-elevated/96 shadow-[0_20px_64px_rgba(0,0,0,0.38)] backdrop-blur-xl",
     organizationSwitcherPreviewButton:
       "rounded-[8px] transition-colors hover:bg-field",
     organizationSwitcherPopoverActionButton:
@@ -76,7 +76,7 @@ export const clerkAppearance = {
     organizationListPreviewButton:
       "rounded-[8px] border border-hairline bg-panel/70 transition-colors hover:bg-elevated",
     organizationListCreateOrganizationActionButton:
-      "rounded-[8px] bg-[linear-gradient(135deg,var(--rose),var(--gold))] text-primary-foreground transition-colors",
+      "rounded-[8px] bg-[linear-gradient(135deg,#d9956f,#d4af7f)] text-primary-foreground transition-colors",
     organizationPreviewMainIdentifier: "text-parchment",
     organizationPreviewSecondaryIdentifier: "text-tan",
     userPreviewMainIdentifierText: "text-parchment",
