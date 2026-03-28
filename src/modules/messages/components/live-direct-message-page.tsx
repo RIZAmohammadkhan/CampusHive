@@ -124,21 +124,24 @@ function LiveDirectMessagePageInner({
     })
   }
 
+  const title = otherMember?.name ?? conversation.name
+  const subtitle = otherMember ? "Direct message" : undefined
+
   return (
     <MinimalChatThread
       backHref={workspaceMessagesPath(workspaceSlug)}
       backLabel="Messages"
-      title={otherMember?.name ?? conversation.name}
-      subtitle="Direct message"
-      scopeLabel="Private chat"
+      title={title}
+      subtitle={subtitle}
+      scopeLabel="Private"
       headerAction={
         otherMember ? (
           <Link
             href={workspacePersonPath(workspaceSlug, otherMember.id)}
-            className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-fit")}
           >
             <UserCircle2Icon className="size-4" />
-            Profile
+            View profile
           </Link>
         ) : null
       }
@@ -148,9 +151,9 @@ function LiveDirectMessagePageInner({
       onDraftChange={setMessage}
       onSubmit={handleSubmit}
       isPending={isPending}
-      placeholder={`Message ${otherMember?.name ?? conversation.name}`}
-      emptyState="No messages yet. Start the conversation."
-      composerHint="Private replies stay between the two participants."
+      placeholder={`Write to ${title}`}
+      emptyState="Start the conversation."
+      composerHint="Only the two of you can see this."
       authorHref={(authorId) => workspacePersonPath(workspaceSlug, authorId)}
     />
   )

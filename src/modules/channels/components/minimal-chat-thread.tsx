@@ -61,11 +61,11 @@ export function MinimalChatThread({
   const timeline = buildMessageTimeline(messages)
 
   return (
-    <div className="mx-auto w-full max-w-[980px]">
+    <div className="mx-auto w-full max-w-[880px]">
       <section className="do-surface overflow-hidden">
-        <div className="border-b border-hairline px-5 py-5 sm:px-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
+        <div className="border-b border-hairline px-5 py-4 sm:px-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-3">
               <Link
                 href={backHref}
                 className={cn(
@@ -75,13 +75,19 @@ export function MinimalChatThread({
               >
                 {backLabel}
               </Link>
-              <div className="mt-4">
-                {scopeLabel ? <p className="do-eyebrow">{scopeLabel}</p> : null}
-                <h1 className="mt-2 text-[28px] font-semibold tracking-tight text-cream">
-                  {title}
-                </h1>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="truncate text-[24px] font-semibold tracking-tight text-cream">
+                    {title}
+                  </h1>
+                  {scopeLabel ? (
+                    <span className="rounded-full border border-hairline px-2 py-0.5 text-[11px] text-tan">
+                      {scopeLabel}
+                    </span>
+                  ) : null}
+                </div>
                 {subtitle ? (
-                  <p className="mt-2 text-[13px] leading-6 text-tan">{subtitle}</p>
+                  <p className="mt-1 text-[13px] leading-6 text-tan">{subtitle}</p>
                 ) : null}
               </div>
             </div>
@@ -89,7 +95,7 @@ export function MinimalChatThread({
           </div>
 
           {threadLinks.length ? (
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
               {threadLinks.map((link) => (
                 <Link
                   key={link.href}
@@ -109,13 +115,13 @@ export function MinimalChatThread({
         </div>
 
         <div className="bg-black/10">
-          <div className="max-h-[70dvh] overflow-y-auto px-4 py-5 sm:px-6">
+          <div className="max-h-[68dvh] overflow-y-auto px-4 py-5 sm:px-6">
             {timeline.length === 0 ? (
-              <div className="rounded-[18px] border border-dashed border-hairline bg-surface/45 px-4 py-5 text-[13px] leading-6 text-tan">
+              <div className="rounded-[16px] border border-dashed border-hairline bg-surface/45 px-4 py-5 text-[13px] leading-6 text-tan">
                 {emptyState}
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {timeline.map((item) =>
                   item.type === "divider" ? (
                     <div key={item.key} className="flex items-center gap-3 py-1">
@@ -136,7 +142,7 @@ export function MinimalChatThread({
                       <div className="max-w-[min(78%,680px)]">
                         <div
                           className={cn(
-                            "mb-2 flex items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-tan",
+                            "mb-2 flex items-center gap-2 text-[11px] text-tan",
                             item.author.isCurrentUser && "justify-end"
                           )}
                         >
@@ -158,7 +164,7 @@ export function MinimalChatThread({
                             <div
                               key={entry.id}
                               className={cn(
-                                "rounded-[18px] border px-4 py-3 text-[14px] leading-7 shadow-[0_10px_28px_rgba(0,0,0,0.14)]",
+                                "rounded-[16px] border px-4 py-3 text-[14px] leading-6",
                                 item.author.isCurrentUser
                                   ? "border-[rgba(201,132,122,0.2)] bg-[rgba(201,132,122,0.14)] text-parchment"
                                   : "border-hairline bg-surface/80 text-parchment"
@@ -178,21 +184,25 @@ export function MinimalChatThread({
 
           {canPostMessages ? (
             <form onSubmit={onSubmit} className="border-t border-hairline px-4 py-4 sm:px-6">
-              <textarea
-                value={draft}
-                onChange={(event) => onDraftChange(event.target.value)}
-                placeholder={placeholder}
-                className={composerClassName}
-                disabled={isPending}
-              />
-              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-[12px] leading-6 text-tan">
-                  {composerHint ?? "Keep the conversation focused and easy to scan."}
-                </p>
-                <Button type="submit" disabled={isPending || !draft.trim()}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <textarea
+                  value={draft}
+                  onChange={(event) => onDraftChange(event.target.value)}
+                  placeholder={placeholder}
+                  className={composerClassName}
+                  disabled={isPending}
+                />
+                <Button
+                  type="submit"
+                  disabled={isPending || !draft.trim()}
+                  className="sm:shrink-0"
+                >
                   Send
                 </Button>
               </div>
+              {composerHint ? (
+                <p className="mt-2 text-[12px] leading-6 text-tan">{composerHint}</p>
+              ) : null}
             </form>
           ) : (
             <div className="border-t border-hairline px-4 py-4 text-[13px] leading-6 text-tan sm:px-6">
