@@ -188,7 +188,7 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
                 ))
               ) : (
                 <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan text-center">
-                  It's quiet right now.
+                  It&apos;s quiet right now.
                 </div>
               )}
             </div>

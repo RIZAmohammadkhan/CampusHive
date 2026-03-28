@@ -76,6 +76,16 @@ type AppSidebarProps = {
   workspaceSlug: string
 }
 
+function sidebarChannelMeta(
+  membershipState: "public" | "admin" | "member" | "pending" | "notMember"
+) {
+  if (membershipState === "public") return "open"
+  if (membershipState === "admin") return "admin"
+  if (membershipState === "member") return "joined"
+  if (membershipState === "pending") return "pending"
+  return "join"
+}
+
 export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
   const enabled = useConvexConfigured()
   const { isAuthenticated } = useConvexAuth()
@@ -172,7 +182,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
                     key={channel.id}
                     href={workspacePath(workspaceSlug, `/channels/${channel.slug}`)}
                     match="prefix"
-                    meta={`${channel.messageCount}`}
+                    meta={sidebarChannelMeta(channel.membershipState)}
                   >
                     <span className="truncate">
                       <span className="text-tan/70">#</span> {channel.slug}

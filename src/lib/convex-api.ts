@@ -64,8 +64,13 @@ export type ChannelListData = {
     slug: string
     name: string
     description: string
+    access: "public" | "members"
+    memberCount: number
     messageCount: number
     lastMessageAt: number | null
+    membershipState: "public" | "admin" | "member" | "pending" | "notMember"
+    canOpen: boolean
+    canRequestToJoin: boolean
   }>
 }
 
@@ -74,7 +79,27 @@ export type ConversationData = {
   name: string
   description: string
   kind: "channel" | "dm"
+  access: "public" | "members"
   canManage: boolean
+  memberCount: number | null
+  viewerMembershipState: "public" | "admin" | "member" | "pending" | "notMember"
+  canViewMessages: boolean
+  canPostMessages: boolean
+  canRequestToJoin: boolean
+  canLeave: boolean
+  members: Array<{
+    id: string
+    name: string
+    imageUrl: string | null
+    joinedAt: number
+    isCurrentUser: boolean
+  }>
+  pendingRequests: Array<{
+    userId: string
+    name: string
+    imageUrl: string | null
+    createdAt: number
+  }>
 }
 
 export type MessageData = {
@@ -199,6 +224,27 @@ export const convexApi = {
       { workspaceSlug: string; name: string; description?: string },
       { channelId: string; slug: string }
     >("chat:createChannel"),
+    requestToJoin: mutationRef<
+      { workspaceSlug: string; slug: string },
+      null
+    >("chat:requestToJoin"),
+    reviewJoinRequest: mutationRef<
+      {
+        workspaceSlug: string
+        slug: string
+        userId: string
+        approve: boolean
+      },
+      null
+    >("chat:reviewJoinRequest"),
+    leaveChannel: mutationRef<
+      { workspaceSlug: string; slug: string },
+      null
+    >("chat:leaveChannel"),
+    removeMember: mutationRef<
+      { workspaceSlug: string; slug: string; userId: string },
+      null
+    >("chat:removeMember"),
     sendMessage: mutationRef<
       { workspaceSlug: string; slug: string; body: string },
       null

@@ -106,6 +106,7 @@ export async function ensureDefaultChannel(
       name: DEFAULT_CHANNEL.name,
       description: DEFAULT_CHANNEL.description,
       kind: "channel",
+      access: "public",
       createdByUserId: existing.createdByUserId ?? createdByUserId,
       createdAt: existing.createdAt ?? Date.now(),
     })
@@ -118,6 +119,7 @@ export async function ensureDefaultChannel(
     name: DEFAULT_CHANNEL.name,
     description: DEFAULT_CHANNEL.description,
     kind: "channel",
+    access: "public",
     createdByUserId,
     createdAt: Date.now(),
   })

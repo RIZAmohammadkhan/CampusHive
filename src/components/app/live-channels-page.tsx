@@ -2,7 +2,13 @@
 
 import { useState, useTransition } from "react"
 import Link from "next/link"
-import { ArrowRightIcon, PlusIcon, ShieldCheckIcon, Users2Icon } from "lucide-react"
+import {
+  ArrowRightIcon,
+  LockKeyholeIcon,
+  PlusIcon,
+  ShieldCheckIcon,
+  Users2Icon,
+} from "lucide-react"
 import { useMutation, useQuery } from "convex/react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -13,7 +19,9 @@ import { ConvexAuthGate } from "@/components/convex/convex-auth-gate"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
 import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import { convexApi } from "@/lib/convex-api"
 import { workspacePath } from "@/lib/workspaces"
 
@@ -29,6 +37,16 @@ function formatActivity(timestamp: number | null) {
   }
 
   return `${Math.round(diffMinutes / 60)} hr ago`
+}
+
+function membershipLabel(
+  membershipState: "public" | "admin" | "member" | "pending" | "notMember"
+) {
+  if (membershipState === "public") return "Campus-wide"
+  if (membershipState === "admin") return "Admin access"
+  if (membershipState === "member") return "Joined"
+  if (membershipState === "pending") return "Request pending"
+  return "Request required"
 }
 
 export function LiveChannelsPage({ workspaceSlug }: { workspaceSlug: string }) {
@@ -55,8 +73,10 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   const channelsData = useQuery(convexApi.chat.listChannels, { workspaceSlug })
   const directoryData = useQuery(convexApi.workspaces.directory, { workspaceSlug })
   const createChannel = useMutation(convexApi.chat.createChannel)
+  const requestToJoin = useMutation(convexApi.chat.requestToJoin)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [pendingJoinSlug, setPendingJoinSlug] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   if (channelsData === undefined || directoryData === undefined) {
@@ -78,6 +98,31 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   }
 
   const isAdmin = channelsData.currentRole === "admin"
+  const channels = channelsData.channels.map((channel) => {
+    const access = channel.access ?? (channel.slug === "general" ? "public" : "members")
+    const membershipState =
+      channel.membershipState ??
+      (access === "public" ? "public" : isAdmin ? "admin" : "notMember")
+
+    return {
+      ...channel,
+      access,
+      memberCount:
+        channel.memberCount ?? (access === "public" ? directoryData.members.length : 0),
+      membershipState,
+      canOpen:
+        channel.canOpen ??
+        (access === "public" ||
+          membershipState === "admin" ||
+          membershipState === "member"),
+      canRequestToJoin:
+        channel.canRequestToJoin ??
+        (access === "members" &&
+          membershipState !== "admin" &&
+          membershipState !== "member" &&
+          membershipState !== "pending"),
+    }
+  })
 
   const handleCreateChannel = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -102,6 +147,23 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
     })
   }
 
+  const handleRequestToJoin = (slug: string) => {
+    setPendingJoinSlug(slug)
+
+    startTransition(async () => {
+      try {
+        await requestToJoin({ workspaceSlug, slug })
+        toast.success("Join request sent")
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to request access."
+        )
+      } finally {
+        setPendingJoinSlug(null)
+      }
+    })
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
       <section className="space-y-6">
@@ -113,8 +175,8 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                 Every community on campus needs a place students can actually find.
               </h2>
               <p className="max-w-2xl do-copy">
-                Institute admins can create club spaces here. Everyone else gets a
-                clean directory of live communities instead of half-buried group chats.
+                Campus Feed stays open to everyone, while club spaces now support
+                real membership and join requests instead of one giant campus chat.
               </p>
             </div>
 
@@ -143,8 +205,8 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
               </form>
               {!isAdmin ? (
                 <p className="mt-3 text-[12px] leading-6 text-tan">
-                  Only institute admins can create club spaces or change campus
-                  structure.
+                  Institute admins create club spaces. Students can browse clubs,
+                  request membership, and join once approved.
                 </p>
               ) : null}
             </div>
@@ -152,30 +214,68 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
         </div>
 
         <div className="space-y-4">
-          {channelsData.channels.length ? (
-            channelsData.channels.map((channel) => (
-              <Link
-                key={channel.id}
-                href={workspacePath(workspaceSlug, `/channels/${channel.slug}`)}
-                className="do-card block p-5"
-              >
+          {channels.length ? (
+            channels.map((channel) => (
+              <div key={channel.id} className="do-card p-5">
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div>
-                    <p className="text-[18px] font-medium text-cream">{channel.name}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[18px] font-medium text-cream">{channel.name}</p>
+                      {channel.access === "members" ? (
+                        <span className="do-pill">
+                          <LockKeyholeIcon className="size-3.5" />
+                          Members
+                        </span>
+                      ) : (
+                        <span className="do-pill">Campus-wide</span>
+                      )}
+                      <span className="do-pill">{membershipLabel(channel.membershipState)}</span>
+                    </div>
                     <p className="mt-2 text-[13px] leading-6 text-tan">
                       {channel.description}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <span className="do-pill">{channel.memberCount} members</span>
                     <span className="do-pill">{channel.messageCount} messages</span>
                     <span className="do-pill">{formatActivity(channel.lastMessageAt)}</span>
                   </div>
                 </div>
-                <div className="mt-5 flex items-center gap-2 text-[12px] text-parchment">
-                  Open #{channel.slug}
-                  <ArrowRightIcon className="size-4" />
+
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-[12px] text-parchment">
+                    <span className="text-tan/80">#</span> {channel.slug}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={workspacePath(workspaceSlug, `/channels/${channel.slug}`)}
+                      className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                    >
+                      View club
+                    </Link>
+                    {channel.canOpen ? (
+                      <Link
+                        href={workspacePath(workspaceSlug, `/channels/${channel.slug}`)}
+                        className={cn(buttonVariants({ size: "sm" }))}
+                      >
+                        Open chat
+                        <ArrowRightIcon className="size-4" />
+                      </Link>
+                    ) : channel.canRequestToJoin ? (
+                      <Button
+                        size="sm"
+                        disabled={isPending && pendingJoinSlug === channel.slug}
+                        onClick={() => handleRequestToJoin(channel.slug)}
+                      >
+                        Request to join
+                      </Button>
+                    ) : (
+                      <span className="do-pill">Waiting for approval</span>
+                    )}
+                  </div>
                 </div>
-              </Link>
+              </div>
             ))
           ) : (
             <div className="do-panel p-6 text-[13px] leading-6 text-tan">

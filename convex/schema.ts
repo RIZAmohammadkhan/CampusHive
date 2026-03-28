@@ -3,6 +3,12 @@ import { v } from "convex/values"
 
 const workspaceRole = v.union(v.literal("admin"), v.literal("member"))
 const conversationKind = v.union(v.literal("channel"), v.literal("dm"))
+const conversationAccess = v.union(v.literal("public"), v.literal("members"))
+const joinRequestStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("rejected")
+)
 const taskColumn = v.union(v.literal("now"), v.literal("next"), v.literal("later"))
 const taskPriority = v.union(v.literal("High"), v.literal("Medium"), v.literal("Low"))
 const taskStatus = v.union(
@@ -48,9 +54,33 @@ export default defineSchema({
     name: v.string(),
     description: v.string(),
     kind: conversationKind,
+    access: v.optional(conversationAccess),
     createdByUserId: v.optional(v.id("users")),
     createdAt: v.optional(v.number()),
   }).index("by_workspace_and_slug", ["workspaceId", "slug"]),
+
+  conversationMembers: defineTable({
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    userId: v.id("users"),
+    joinedAt: v.number(),
+  })
+    .index("by_conversation_and_user", ["conversationId", "userId"])
+    .index("by_conversation", ["conversationId"])
+    .index("by_user_and_conversation", ["userId", "conversationId"]),
+
+  conversationJoinRequests: defineTable({
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    userId: v.id("users"),
+    status: joinRequestStatus,
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+    reviewedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_conversation_and_user", ["conversationId", "userId"])
+    .index("by_conversation_and_status", ["conversationId", "status"]),
 
   messages: defineTable({
     workspaceId: v.id("workspaces"),
