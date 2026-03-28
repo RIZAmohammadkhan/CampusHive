@@ -133,6 +133,11 @@ export function NotificationCenter({
         return
       }
 
+      if (window.innerWidth < 640) {
+        setPanelOffsetX(0)
+        return
+      }
+
       const gutter = 12
       const panelWidth = panel.getBoundingClientRect().width
       const triggerRight = container.getBoundingClientRect().right
@@ -172,7 +177,7 @@ export function NotificationCenter({
       {open ? (
         <div
           ref={panelRef}
-          className="absolute right-0 z-30 mt-3 w-[min(360px,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] rounded-[10px] border border-hairline bg-elevated/96 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/8 before:content-[''] sm:w-[360px] sm:max-w-none sm:p-4"
+          className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 rounded-[10px] border border-hairline bg-elevated/96 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/8 before:content-[''] sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-3 sm:w-[360px] sm:p-4"
           style={
             panelOffsetX === 0
               ? undefined
