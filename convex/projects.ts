@@ -9,6 +9,7 @@ import {
   requireIdentity,
   syncCurrentWorkspaceMember,
 } from "./lib/auth"
+import { createNotifications } from "./notifications"
 import { getWorkspaceBySlug } from "./lib/workspaces"
 import type { Doc, Id, MutationCtx, QueryCtx } from "./types"
 
@@ -368,6 +369,20 @@ export const createTask = mutationGeneric({
       updatedAt: Date.now(),
     })
 
+    if (assigneeUserId) {
+      await createNotifications(ctx, {
+        workspaceId: workspace._id,
+        recipientUserIds: [assigneeUserId],
+        kind: "taskAssigned",
+        title: `Task assigned: ${title}`,
+        body: `${dueLabel || "No due date"} · ${args.priority} priority`,
+        route: "/projects",
+        actorUserId: user._id,
+        taskId,
+        eventId: args.eventId,
+      })
+    }
+
     return {
       taskId: String(taskId),
     }
@@ -390,7 +405,7 @@ export const assignTask = mutationGeneric({
       throw new Error("Campus space not found.")
     }
 
-    const { role } = await syncCurrentWorkspaceMember(ctx, workspace)
+    const { role, user } = await syncCurrentWorkspaceMember(ctx, workspace)
     assertWorkspaceAdmin(role)
 
     const task = await requireTask(ctx, args.taskId)
@@ -412,6 +427,20 @@ export const assignTask = mutationGeneric({
       ownerName,
       updatedAt: Date.now(),
     })
+
+    if (args.assigneeUserId) {
+      await createNotifications(ctx, {
+        workspaceId: workspace._id,
+        recipientUserIds: [args.assigneeUserId],
+        kind: "taskAssigned",
+        title: `Task assigned: ${task.title}`,
+        body: `${task.dueLabel} · ${task.priority} priority`,
+        route: "/projects",
+        actorUserId: user._id,
+        taskId: task._id,
+        eventId: task.eventId,
+      })
+    }
 
     return null
   },
@@ -451,6 +480,26 @@ export const volunteerForTask = mutationGeneric({
       assigneeUserId: user._id,
       ownerName: getDisplayNameFromUser(user),
       updatedAt: Date.now(),
+    })
+
+    const workspaceMembers = await ctx.db
+      .query("workspaceMembers")
+      .withIndex("by_workspace_and_role", (q) => q.eq("workspaceId", workspace._id))
+      .collect()
+    const adminUserIds = workspaceMembers
+      .filter((member) => member.role === "admin")
+      .map((member) => member.userId)
+
+    await createNotifications(ctx, {
+      workspaceId: workspace._id,
+      recipientUserIds: adminUserIds,
+      kind: "taskVolunteer",
+      title: `${getDisplayNameFromUser(user)} volunteered for ${task.title}`,
+      body: task.description ?? task.dueLabel,
+      route: "/projects",
+      actorUserId: user._id,
+      taskId: task._id,
+      eventId: task.eventId,
     })
 
     return null

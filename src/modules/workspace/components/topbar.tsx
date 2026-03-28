@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { WORKSPACE_HOME_PATTERN } from "@/lib/workspaces"
 import { workspaceApi } from "@/modules/workspace/api"
+import { NotificationCenter } from "@/modules/workspace/components/notification-center"
 import { getWorkspaceSection } from "@/modules/workspace/sections"
 
 type AppTopbarProps = {
@@ -20,38 +21,42 @@ export function AppTopbar({ workspaceSlug }: AppTopbarProps) {
   const { isAuthenticated } = useConvexAuth()
   const queryArgs = enabled && isAuthenticated ? { workspaceSlug } : "skip"
   const viewer = useQuery(workspaceApi.viewer, queryArgs)
-  const content = getWorkspaceSection(pathname, workspaceSlug) ?? {
-    title: "Workspace",
-    subtitle: "Live campus data.",
-  }
+  const section =
+    getWorkspaceSection(pathname, workspaceSlug) ?? {
+      title: "Workspace",
+      subtitle: "Live campus data.",
+      navLabel: "Workspace",
+    }
   const { organization } = useOrganization()
   const roleLabel =
     viewer?.role === "admin"
       ? "College admin"
       : viewer?.role === "member"
-        ? "Student member"
+        ? "Student"
         : "Campus access"
 
   return (
-    <header className="sticky top-0 z-20 border-b border-hairline/80 bg-background/60 backdrop-blur-2xl">
-      <div className="mx-auto flex w-full max-w-[1320px] items-center justify-between gap-4 px-4 py-4 md:px-6 lg:px-8">
+    <header className="sticky top-0 z-20 border-b border-hairline bg-background/88 backdrop-blur-xl">
+      <div className="mx-auto flex w-full max-w-[1360px] items-center justify-between gap-4 px-4 py-4 md:px-6 lg:px-6">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="do-pill">{organization?.slug ?? workspaceSlug}</span>
-            <span className="do-pill">
+          <p className="do-eyebrow">{section.navLabel}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-[28px] font-light tracking-[-0.05em] text-parchment">
+              {section.title}
+            </h1>
+            <span className="do-pill do-pill-gold">
+              {organization?.slug ?? workspaceSlug}
+            </span>
+            <span className="do-pill do-pill-rose">
               <ShieldCheckIcon className="size-3.5" />
               {roleLabel}
             </span>
           </div>
-          <div className="mt-3">
-            <h1 className="truncate text-[22px] font-medium text-cream">
-              {content.title}
-            </h1>
-            <p className="mt-1 text-[12px] text-tan">{content.subtitle}</p>
-          </div>
+          <p className="mt-2 text-[13px] text-tan">{section.subtitle}</p>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          <NotificationCenter workspaceSlug={workspaceSlug} />
           <OrganizationSwitcher
             hidePersonal
             afterCreateOrganizationUrl={WORKSPACE_HOME_PATTERN}

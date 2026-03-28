@@ -30,6 +30,16 @@ export type ChannelListData = {
     canOpen: boolean
     canJoin: boolean
     canRequestToJoin: boolean
+    unreadCount: number
+  }>
+  directMessages: Array<{
+    id: string
+    slug: string
+    name: string
+    imageUrl: string | null
+    preview: string
+    lastMessageAt: number | null
+    unreadCount: number
   }>
 }
 
@@ -282,4 +292,12 @@ export const channelsApi = {
     { workspaceSlug: string; slug: string; sectionSlug?: string; body: string },
     null
   >("chat:sendMessage"),
+  createDirectMessage: mutationRef<
+    { workspaceSlug: string; userId: string },
+    { slug: string }
+  >("chat:createDirectMessage"),
+  markConversationRead: mutationRef<
+    { workspaceSlug: string; slug: string },
+    null
+  >("chat:markConversationRead"),
 }

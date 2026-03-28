@@ -8,6 +8,7 @@ import {
   requireIdentity,
   syncCurrentWorkspaceMember,
 } from "./lib/auth"
+import { createNotifications } from "./notifications"
 import { getWorkspaceBySlug } from "./lib/workspaces"
 import type { Id, MutationCtx, QueryCtx } from "./types"
 
@@ -180,7 +181,7 @@ export const createEvent = mutationGeneric({
       throw new Error("Campus space not found.")
     }
 
-    const { role } = await syncCurrentWorkspaceMember(ctx, workspace)
+    const { role, user } = await syncCurrentWorkspaceMember(ctx, workspace)
     assertWorkspaceAdmin(role)
 
     const title = args.title.trim()
@@ -220,6 +221,22 @@ export const createEvent = mutationGeneric({
       type,
       location,
       order,
+    })
+
+    const workspaceMembers = await ctx.db
+      .query("workspaceMembers")
+      .withIndex("by_workspace_and_role", (q) => q.eq("workspaceId", workspace._id))
+      .collect()
+
+    await createNotifications(ctx, {
+      workspaceId: workspace._id,
+      recipientUserIds: workspaceMembers.map((member) => member.userId),
+      kind: "workspaceEvent",
+      title: `New event: ${title}`,
+      body: `${dateLabel} · ${time} · ${location}`,
+      route: "/calendar",
+      actorUserId: user._id,
+      eventId,
     })
 
     return {

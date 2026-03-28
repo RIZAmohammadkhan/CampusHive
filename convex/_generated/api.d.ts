@@ -14,6 +14,7 @@ import type * as dashboard from "../dashboard.js";
 import type * as events from "../events.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_workspaces from "../lib/workspaces.js";
+import type * as notifications from "../notifications.js";
 import type * as presence from "../presence.js";
 import type * as projects from "../projects.js";
 import type * as types from "../types.js";
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   events: typeof events;
   "lib/auth": typeof lib_auth;
   "lib/workspaces": typeof lib_workspaces;
+  notifications: typeof notifications;
   presence: typeof presence;
   projects: typeof projects;
   types: typeof types;

@@ -25,6 +25,14 @@ const taskStatus = v.union(
 const taskKind = v.union(v.literal("assigned"), v.literal("volunteer"))
 const eventStatus = v.union(v.literal("open"), v.literal("closed"))
 const pollStatus = v.union(v.literal("open"), v.literal("closed"))
+const notificationKind = v.union(
+  v.literal("dm"),
+  v.literal("mention"),
+  v.literal("workspaceEvent"),
+  v.literal("clubEvent"),
+  v.literal("taskAssigned"),
+  v.literal("taskVolunteer")
+)
 
 export default defineSchema({
   users: defineTable({
@@ -81,6 +89,15 @@ export default defineSchema({
     .index("by_conversation", ["conversationId"])
     .index("by_user_and_conversation", ["userId", "conversationId"]),
 
+  conversationReads: defineTable({
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    userId: v.id("users"),
+    lastReadAt: v.number(),
+  })
+    .index("by_conversation_and_user", ["conversationId", "userId"])
+    .index("by_user_and_workspace", ["userId", "workspaceId"]),
+
   conversationJoinRequests: defineTable({
     workspaceId: v.id("workspaces"),
     conversationId: v.id("conversations"),
@@ -127,6 +144,23 @@ export default defineSchema({
   })
     .index("by_workspace_and_user", ["workspaceId", "userId"])
     .index("by_workspace_and_last_seen_at", ["workspaceId", "lastSeenAt"]),
+
+  notifications: defineTable({
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    kind: notificationKind,
+    title: v.string(),
+    body: v.string(),
+    route: v.string(),
+    actorUserId: v.optional(v.id("users")),
+    conversationId: v.optional(v.id("conversations")),
+    eventId: v.optional(v.union(v.id("events"), v.id("clubEvents"))),
+    taskId: v.optional(v.id("tasks")),
+    createdAt: v.number(),
+    readAt: v.optional(v.number()),
+  })
+    .index("by_user_and_created_at", ["userId", "createdAt"])
+    .index("by_workspace_and_user_created_at", ["workspaceId", "userId", "createdAt"]),
 
   rooms: defineTable({
     workspaceId: v.id("workspaces"),

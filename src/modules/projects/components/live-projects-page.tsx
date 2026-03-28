@@ -26,9 +26,9 @@ import { LiveLoadingState } from "@/modules/shared/components/live-loading-state
 
 const statIcons = [SparklesIcon, UserPlusIcon, TriangleAlertIcon]
 const selectClassName =
-  "h-10 rounded-2xl border border-hairline bg-field/90 px-3 text-[13px] text-parchment outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/30"
+  "h-10 rounded-[8px] border border-[rgba(255,255,255,0.08)] bg-field px-3 text-[13px] text-parchment outline-none transition-[border-color,box-shadow] focus:border-[rgba(201,132,122,0.5)] focus:ring-3 focus:ring-[rgba(201,132,122,0.18)]"
 const textareaClassName =
-  "min-h-[112px] w-full rounded-[20px] border border-hairline bg-field/90 px-3 py-3 text-[13px] leading-6 text-parchment outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/30"
+  "min-h-[112px] w-full rounded-[8px] border border-[rgba(255,255,255,0.08)] bg-field px-3 py-3 text-[13px] leading-6 text-parchment outline-none transition-[border-color,box-shadow] focus:border-[rgba(201,132,122,0.5)] focus:ring-3 focus:ring-[rgba(201,132,122,0.18)]"
 const statusOptions = [
   { id: "acknowledged", label: "Acknowledged" },
   { id: "inProgress", label: "In progress" },

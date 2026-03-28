@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { ClerkProvider } from "@clerk/nextjs"
-import { Fraunces, Geist, Geist_Mono } from "next/font/google"
+import { DM_Serif_Display, Geist, Geist_Mono } from "next/font/google"
 
 import { ConvexClientProvider } from "@/components/convex/convex-client-provider"
 import { clerkAppearance } from "@/lib/clerk-theme"
@@ -19,8 +19,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 })
 
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
+const dmSerifDisplay = DM_Serif_Display({
+  weight: "400",
+  variable: "--font-serif",
   subsets: ["latin"],
 })
 
@@ -37,7 +38,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${geistSans.variable} ${geistMono.variable} ${fraunces.variable}`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} ${dmSerifDisplay.variable}`}
     >
       <body className="antialiased">
         <ClerkProvider appearance={clerkAppearance} afterSignOutUrl="/sign-in">

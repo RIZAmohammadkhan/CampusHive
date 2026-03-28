@@ -1,6 +1,13 @@
 "use client"
 
-import { type FormEvent, type ReactNode, useDeferredValue, useState, useTransition } from "react"
+import {
+  type FormEvent,
+  type ReactNode,
+  useDeferredValue,
+  useEffect,
+  useState,
+  useTransition,
+} from "react"
 import Link from "next/link"
 import {
   ArrowLeftIcon,
@@ -40,11 +47,11 @@ import { LiveLoadingState } from "@/modules/shared/components/live-loading-state
 import { MemberProfileSheet } from "@/modules/workspace/components/member-profile-sheet"
 
 const selectClassName =
-  "h-10 rounded-2xl border border-hairline bg-field/90 px-3 text-[13px] text-parchment outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/30"
+  "h-10 rounded-[8px] border border-[rgba(255,255,255,0.08)] bg-field px-3 text-[13px] text-parchment outline-none transition-[border-color,box-shadow] focus:border-[rgba(201,132,122,0.5)] focus:ring-3 focus:ring-[rgba(201,132,122,0.18)]"
 const textareaClassName =
-  "min-h-28 w-full rounded-2xl border border-hairline bg-field/90 px-3 py-3 text-[13px] leading-6 text-parchment outline-none transition-colors duration-150 ease-out placeholder:text-tan focus:border-ring focus:ring-3 focus:ring-ring/30"
+  "min-h-28 w-full rounded-[8px] border border-[rgba(255,255,255,0.08)] bg-field px-3 py-3 text-[13px] leading-6 text-parchment outline-none transition-[border-color,box-shadow] duration-150 ease-out placeholder:text-tan focus:border-[rgba(201,132,122,0.5)] focus:ring-3 focus:ring-[rgba(201,132,122,0.18)]"
 const composerClassName =
-  "min-h-24 w-full rounded-[22px] border border-hairline bg-field/90 px-4 py-3 text-[14px] leading-6 text-parchment outline-none transition-colors placeholder:text-tan focus:border-ring focus:ring-3 focus:ring-ring/30"
+  "min-h-24 w-full rounded-[8px] border border-[rgba(255,255,255,0.08)] bg-field px-4 py-3 text-[14px] leading-6 text-parchment outline-none transition-[border-color,box-shadow] placeholder:text-tan focus:border-[rgba(201,132,122,0.5)] focus:ring-3 focus:ring-[rgba(201,132,122,0.18)]"
 
 function formatMessageTime(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
@@ -295,6 +302,7 @@ function LiveChannelPageInner({
     slug: clubSlug,
   })
   const sendMessage = useMutation(channelsApi.sendMessage)
+  const markConversationRead = useMutation(channelsApi.markConversationRead)
   const createDiscussionSection = useMutation(channelsApi.createDiscussionSection)
   const joinOpenClub = useMutation(channelsApi.joinOpenClub)
   const requestToJoin = useMutation(channelsApi.requestToJoin)
@@ -326,6 +334,28 @@ function LiveChannelPageInner({
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const deferredMemberSearch = useDeferredValue(memberSearch.trim().toLowerCase())
+
+  useEffect(() => {
+    if (conversation === undefined || conversation === null || messages === undefined) {
+      return
+    }
+
+    const nextAccess =
+      conversation.access ??
+      (conversation.slug === "general" ? "public" : "members")
+    const nextCanViewMessages =
+      conversation.canViewMessages ??
+      (nextAccess === "public" || conversation.canManage)
+
+    if (!nextCanViewMessages) {
+      return
+    }
+
+    void markConversationRead({
+      workspaceSlug,
+      slug: clubSlug,
+    })
+  }, [conversation, messages, clubSlug, markConversationRead, workspaceSlug])
 
   if (
     conversation === undefined ||
@@ -385,6 +415,37 @@ function LiveChannelPageInner({
       .includes(deferredMemberSearch)
   })
   const timeline = buildMessageTimeline(messages)
+  const isDirectMessage = conversation.kind === "dm"
+
+  const backLabel = isDirectMessage ? "Messages" : "Clubs"
+  const categoryLabel = isDirectMessage
+    ? "Direct message"
+    : conversation.category
+  const accessLabel = isDirectMessage
+    ? "Private chat"
+    : access === "public"
+      ? "Open club"
+      : "Approval required"
+  const membershipSummary = isDirectMessage
+    ? "Private conversation"
+    : membershipLabel(viewerMembershipState)
+  const detailEyebrow = isDirectMessage ? "Direct message" : "Club details"
+  const sectionEyebrow = isDirectMessage ? "Thread" : "Current section"
+  const sectionTitle = selectedSection
+    ? isDirectMessage
+      ? selectedSection.name
+      : `# ${selectedSection.name}`
+    : isDirectMessage
+      ? "Direct message"
+      : "Discussion"
+  const sectionSummary =
+    selectedSection?.description ??
+    (isDirectMessage
+      ? "A private conversation between workspace members."
+      : "Keep discussion organized by topic instead of one long club feed.")
+  const emptyTimelineLabel = isDirectMessage
+    ? `No messages yet. Say hello to ${conversation.name}.`
+    : "No messages yet in this section. Start the conversation."
 
   const runAction = (
     key: string,
@@ -526,7 +587,7 @@ function LiveChannelPageInner({
             )}
           >
             <ArrowLeftIcon className="size-4" />
-            Clubs
+            {backLabel}
           </Link>
 
           <div className="mt-5 rounded-[28px] border border-hairline bg-surface/60 p-5">
@@ -534,9 +595,14 @@ function LiveChannelPageInner({
               {clubInitials(conversation.name)}
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="do-pill">{conversation.category}</span>
+              <span className="do-pill">{categoryLabel}</span>
               <span className="do-pill">
-                {access === "members" ? (
+                {isDirectMessage ? (
+                  <>
+                    <MessageSquareTextIcon className="size-3.5" />
+                    Private
+                  </>
+                ) : access === "members" ? (
                   <>
                     <LockKeyholeIcon className="size-3.5" />
                     Approval
@@ -553,8 +619,8 @@ function LiveChannelPageInner({
               {conversation.description}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="do-pill">{membershipLabel(viewerMembershipState)}</span>
-              {viewerClubRole ? (
+              <span className="do-pill">{membershipSummary}</span>
+              {!isDirectMessage && viewerClubRole ? (
                 <span className="do-pill">Your role: {clubRoleLabel(viewerClubRole)}</span>
               ) : null}
             </div>
@@ -567,10 +633,10 @@ function LiveChannelPageInner({
               <div>
                 <p className="do-eyebrow">Discussion</p>
                 <h3 className="mt-2 text-[20px] font-medium text-cream">
-                  Club channels
+                  {isDirectMessage ? "Private thread" : "Club channels"}
                 </h3>
               </div>
-              {!conversation.isGeneral && conversation.canManage ? (
+              {!isDirectMessage && !conversation.isGeneral && conversation.canManage ? (
                 <Button
                   size="sm"
                   variant="outline"
@@ -646,29 +712,31 @@ function LiveChannelPageInner({
           </section>
         ) : null}
 
-        <section className="do-panel p-5">
-          <p className="do-eyebrow">Quick glance</p>
-          <div className="mt-4 grid gap-3">
-            <div className="rounded-[20px] border border-hairline bg-surface/55 p-4">
-              <p className="text-[11px] tracking-[0.12em] text-tan uppercase">Members</p>
-              <p className="mt-2 text-[18px] font-medium text-cream">
-                {memberCount !== null ? memberCount : "Campus-wide"}
-              </p>
+        {!isDirectMessage ? (
+          <section className="do-panel p-5">
+            <p className="do-eyebrow">Quick glance</p>
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-[20px] border border-hairline bg-surface/55 p-4">
+                <p className="text-[11px] tracking-[0.12em] text-tan uppercase">Members</p>
+                <p className="mt-2 text-[18px] font-medium text-cream">
+                  {memberCount !== null ? memberCount : "Campus-wide"}
+                </p>
+              </div>
+              <div className="rounded-[20px] border border-hairline bg-surface/55 p-4">
+                <p className="text-[11px] tracking-[0.12em] text-tan uppercase">Events</p>
+                <p className="mt-2 text-[18px] font-medium text-cream">
+                  {clubOps.events.length}
+                </p>
+              </div>
+              <div className="rounded-[20px] border border-hairline bg-surface/55 p-4">
+                <p className="text-[11px] tracking-[0.12em] text-tan uppercase">Polls</p>
+                <p className="mt-2 text-[18px] font-medium text-cream">
+                  {clubOps.polls.length}
+                </p>
+              </div>
             </div>
-            <div className="rounded-[20px] border border-hairline bg-surface/55 p-4">
-              <p className="text-[11px] tracking-[0.12em] text-tan uppercase">Events</p>
-              <p className="mt-2 text-[18px] font-medium text-cream">
-                {clubOps.events.length}
-              </p>
-            </div>
-            <div className="rounded-[20px] border border-hairline bg-surface/55 p-4">
-              <p className="text-[11px] tracking-[0.12em] text-tan uppercase">Polls</p>
-              <p className="mt-2 text-[18px] font-medium text-cream">
-                {clubOps.polls.length}
-              </p>
-            </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
       </aside>
 
       <main className="space-y-6">
@@ -677,10 +745,10 @@ function LiveChannelPageInner({
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="do-pill">Club details</span>
+                  <span className="do-pill">{detailEyebrow}</span>
                   <span className="do-pill">
                     <MessageSquareTextIcon className="size-3.5" />
-                    #{conversation.slug}
+                    {isDirectMessage ? "Direct message" : `#${conversation.slug}`}
                   </span>
                   {selectedSection ? (
                     <span className="do-pill">
@@ -700,9 +768,7 @@ function LiveChannelPageInner({
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div className="rounded-[20px] border border-hairline bg-surface/55 px-4 py-3">
                   <p className="text-[10px] tracking-[0.15em] text-tan uppercase">Access</p>
-                  <p className="mt-2 text-[14px] font-medium text-cream">
-                    {access === "public" ? "Open club" : "Approval required"}
-                  </p>
+                  <p className="mt-2 text-[14px] font-medium text-cream">{accessLabel}</p>
                 </div>
                 <div className="rounded-[20px] border border-hairline bg-surface/55 px-4 py-3">
                   <p className="text-[10px] tracking-[0.15em] text-tan uppercase">Section</p>
@@ -726,14 +792,9 @@ function LiveChannelPageInner({
             <section className="do-panel p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
-                  <p className="do-eyebrow">Current section</p>
-                  <h3 className="mt-2 text-[22px] font-medium text-cream">
-                    {selectedSection ? `# ${selectedSection.name}` : "Discussion"}
-                  </h3>
-                  <p className="mt-2 text-[13px] leading-6 text-tan">
-                    {selectedSection?.description ??
-                      "Keep discussion organized by topic instead of one long club feed."}
-                  </p>
+                  <p className="do-eyebrow">{sectionEyebrow}</p>
+                  <h3 className="mt-2 text-[22px] font-medium text-cream">{sectionTitle}</h3>
+                  <p className="mt-2 text-[13px] leading-6 text-tan">{sectionSummary}</p>
                 </div>
                 {selectedSection ? (
                   <div className="flex flex-wrap gap-2">
@@ -749,7 +810,9 @@ function LiveChannelPageInner({
             {!canViewMessages ? (
               <section className="do-card p-6">
                 <p className="text-[16px] font-medium text-cream">
-                  Join this club to unlock its discussion, events, and polls.
+                  {isDirectMessage
+                    ? "This direct message is not available yet."
+                    : "Join this club to unlock its discussion, events, and polls."}
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2">
                   {canJoin ? (
@@ -787,7 +850,13 @@ function LiveChannelPageInner({
                   <div>
                     <p className="do-eyebrow">Discussion</p>
                     <h3 className="mt-2 text-[24px] font-medium text-cream">
-                      {selectedSection ? `# ${selectedSection.name}` : "Club discussion"}
+                      {selectedSection
+                        ? isDirectMessage
+                          ? selectedSection.name
+                          : `# ${selectedSection.name}`
+                        : isDirectMessage
+                          ? "Direct message"
+                          : "Club discussion"}
                     </h3>
                   </div>
                   <span className="do-pill">
@@ -799,7 +868,7 @@ function LiveChannelPageInner({
                   <div className="max-h-[640px] space-y-4 overflow-y-auto px-4 py-5 sm:px-5">
                     {timeline.length === 0 ? (
                       <div className="rounded-[20px] border border-dashed border-hairline bg-surface/45 p-5 text-[13px] leading-6 text-tan">
-                        No messages yet in this section. Start the conversation.
+                        {emptyTimelineLabel}
                       </div>
                     ) : (
                       timeline.map((item) =>
@@ -861,16 +930,20 @@ function LiveChannelPageInner({
                         value={message}
                         onChange={(event) => setMessage(event.target.value)}
                         placeholder={
-                          selectedSection
-                            ? `Message #${selectedSection.slug}`
-                            : "Message this club"
+                          isDirectMessage
+                            ? `Message ${conversation.name}`
+                            : selectedSection
+                              ? `Message #${selectedSection.slug}`
+                              : "Message this club"
                         }
                         className={composerClassName}
                         disabled={isPending && pendingAction === "send-message"}
                       />
                       <div className="mt-3 flex items-center justify-between gap-3">
                         <p className="text-[12px] leading-6 text-tan">
-                          Keep this section focused on {selectedSection?.name ?? "the current topic"}.
+                          {isDirectMessage
+                            ? "Private messages stay between the participants."
+                            : `Keep this section focused on ${selectedSection?.name ?? "the current topic"}.`}
                         </p>
                         <Button
                           type="submit"
@@ -893,7 +966,7 @@ function LiveChannelPageInner({
               </section>
             )}
 
-            {clubOps.canParticipate ? (
+            {!isDirectMessage && clubOps.canParticipate ? (
               <>
                 <section className="do-panel p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1046,39 +1119,42 @@ function LiveChannelPageInner({
                             </div>
 
                             {event.viewerTicket ? (
-                              <div className="mt-5 rounded-[24px] border border-hairline bg-surface/55 p-4">
-                                <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
+                              <div className="relative mt-5 overflow-hidden rounded-[10px] border border-hairline bg-[linear-gradient(180deg,rgba(201,132,122,0.16),rgba(201,132,122,0)_18%),rgba(20,20,22,0.94)] p-5 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/8 before:content-['']">
+                                <div className="grid gap-5 lg:grid-cols-[1fr_220px]">
                                   <div>
                                     <p className="do-eyebrow">Your Ticket</p>
-                                    <h4 className="mt-2 text-[22px] font-medium text-cream">
+                                    <h4 className="mt-2 text-[22px] font-semibold text-parchment">
                                       {event.viewerTicket.eventTitle}
                                     </h4>
                                     <div className="mt-4 flex flex-wrap gap-2">
-                                      <span className="do-pill">
+                                      <span className="do-pill do-pill-platinum">
                                         {event.viewerTicket.attendeeName}
                                       </span>
-                                      <span className="do-pill">
+                                      <span className="do-pill do-pill-gold">
                                         {event.viewerTicket.organizationName}
                                       </span>
-                                      <span className="do-pill">
-                                        {event.viewerTicket.code}
-                                      </span>
-                                      <span className="do-pill">
+                                      <span className="do-pill do-pill-rose">
                                         {event.viewerTicket.checkedInAt
                                           ? "Checked in"
                                           : "Ready for entry"}
                                       </span>
                                     </div>
-                                    <p className="mt-4 text-[13px] leading-6 text-tan">
-                                      Club: {event.viewerTicket.clubName}
-                                    </p>
-                                    <p className="mt-1 text-[13px] leading-6 text-tan">
-                                      Entry: {formatEventDate(event.viewerTicket.eventDate)} at{" "}
-                                      {event.viewerTicket.eventTime}
-                                    </p>
-                                    <p className="mt-1 text-[13px] leading-6 text-tan">
-                                      Venue: {event.viewerTicket.eventLocation}
-                                    </p>
+                                    <div className="mt-4 rounded-[8px] border border-[rgba(200,169,110,0.18)] bg-[rgba(200,169,110,0.08)] px-3 py-2">
+                                      <p className="text-[10px] font-semibold tracking-[0.08em] text-gold uppercase">
+                                        Pass Code
+                                      </p>
+                                      <p className="mt-2 font-mono text-[14px] tracking-[0.12em] text-gold">
+                                        {event.viewerTicket.code}
+                                      </p>
+                                    </div>
+                                    <div className="mt-4 space-y-1.5 text-[13px] leading-6 text-tan">
+                                      <p>Club: {event.viewerTicket.clubName}</p>
+                                      <p>
+                                        Entry: {formatEventDate(event.viewerTicket.eventDate)} at{" "}
+                                        {event.viewerTicket.eventTime}
+                                      </p>
+                                      <p>Venue: {event.viewerTicket.eventLocation}</p>
+                                    </div>
                                     {event.viewerTicket.attendeeEmail ? (
                                       <p className="mt-1 text-[13px] leading-6 text-tan">
                                         Email: {event.viewerTicket.attendeeEmail}

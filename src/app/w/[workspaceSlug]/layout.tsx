@@ -36,8 +36,8 @@ export default async function AppLayout({
         <div className="flex min-w-0 flex-1 flex-col">
           <WorkspaceRuntime workspaceSlug={workspaceSlug} />
           <AppTopbar workspaceSlug={workspaceSlug} />
-          <main className="min-h-0 flex-1 overflow-auto px-4 py-4 md:px-6 md:py-6 lg:px-8">
-            <div className="mx-auto flex w-full max-w-[1320px] flex-col gap-6 lg:gap-8">
+          <main className="min-h-0 flex-1 overflow-auto px-4 py-4 md:px-5 md:py-5 lg:px-6">
+            <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-5 lg:gap-6">
               {children}
             </div>
           </main>

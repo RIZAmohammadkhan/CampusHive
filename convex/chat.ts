@@ -5,10 +5,12 @@ import {
   assertActiveOrganization,
   assertWorkspaceAdmin,
   getDisplayNameFromUser,
+  getWorkspaceMember,
   getWorkspaceViewer,
   requireIdentity,
   syncCurrentWorkspaceMember,
 } from "./lib/auth"
+import { createNotifications } from "./notifications"
 import { getWorkspaceBySlug } from "./lib/workspaces"
 import type { Doc, Id, MutationCtx, ReadCtx } from "./types"
 
@@ -39,6 +41,11 @@ const defaultDiscussionSectionSeed = [
     description: "Planning details, reminders, and event-day coordination.",
   },
 ] as const
+const directMessageDiscussionSection = {
+  slug: "chat",
+  name: "Chat",
+  description: "Private messages between members.",
+} as const
 
 type DiscussionSectionSnapshot = {
   id: string | null
@@ -85,6 +92,56 @@ function createOptionId(label: string, index: number) {
     .slice(0, 24)
 
   return `${slug || "option"}-${index + 1}`
+}
+
+function normalizeMentionToken(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+function buildMentionTokens(user: {
+  name?: string
+  firstName?: string
+  lastName?: string
+  email?: string
+}) {
+  const tokens = new Set<string>()
+  const directValues = [user.name, user.firstName, user.lastName]
+
+  for (const value of directValues) {
+    const normalized = value?.trim()
+
+    if (!normalized) {
+      continue
+    }
+
+    const token = normalizeMentionToken(normalized)
+
+    if (token) {
+      tokens.add(token)
+      tokens.add(token.replace(/-/g, ""))
+    }
+
+    normalized
+      .split(/\s+/)
+      .map((part) => normalizeMentionToken(part))
+      .filter(Boolean)
+      .forEach((part) => {
+        tokens.add(part)
+      })
+  }
+
+  const emailLocalPart = user.email?.split("@")[0]
+  const emailToken = emailLocalPart ? normalizeMentionToken(emailLocalPart) : ""
+
+  if (emailToken) {
+    tokens.add(emailToken)
+  }
+
+  return tokens
 }
 
 function normalizePollOptions(options: string[]) {
@@ -139,6 +196,10 @@ function normalizeClubCategory(value: string | undefined) {
   return trimmed.replace(/\s+/g, " ").slice(0, 40)
 }
 
+function isDirectMessageConversation(conversation: Doc<"conversations">) {
+  return conversation.kind === "dm"
+}
+
 function categoryForConversation(conversation: Doc<"conversations">) {
   if (conversation.category?.trim()) {
     return conversation.category.trim()
@@ -152,6 +213,10 @@ function categoryForConversation(conversation: Doc<"conversations">) {
 }
 
 function resolveConversationAccess(conversation: Doc<"conversations">): ChannelAccess {
+  if (isDirectMessageConversation(conversation)) {
+    return "members"
+  }
+
   return conversation.access ?? (conversation.slug === "general" ? "public" : "members")
 }
 
@@ -159,6 +224,10 @@ function resolveConversationMemberRole(
   conversation: Doc<"conversations">,
   membership: Doc<"conversationMembers">
 ): ClubRole {
+  if (isDirectMessageConversation(conversation)) {
+    return "member"
+  }
+
   if (membership.role) {
     return membership.role
   }
@@ -282,6 +351,18 @@ async function listDiscussionSectionSnapshots(
   ctx: ReadCtx | MutationCtx,
   conversation: Doc<"conversations">
 ): Promise<DiscussionSectionSnapshot[]> {
+  if (isDirectMessageConversation(conversation)) {
+    return [
+      {
+        id: null,
+        slug: directMessageDiscussionSection.slug,
+        name: directMessageDiscussionSection.name,
+        description: directMessageDiscussionSection.description,
+        position: 0,
+      },
+    ]
+  }
+
   if (conversation.slug === "general") {
     return [
       {
@@ -399,36 +480,54 @@ async function countOwners(
 }
 
 function canManageConversation({
+  kind,
   workspaceRole,
   clubRole,
 }: {
+  kind: "channel" | "dm"
   workspaceRole: "admin" | "member"
   clubRole: ClubRole | null
 }) {
+  if (kind === "dm") {
+    return false
+  }
+
   return workspaceRole === "admin" || clubRole === "owner" || clubRole === "officer"
 }
 
 function canEditConversationRoles({
+  kind,
   workspaceRole,
   clubRole,
 }: {
+  kind: "channel" | "dm"
   workspaceRole: "admin" | "member"
   clubRole: ClubRole | null
 }) {
+  if (kind === "dm") {
+    return false
+  }
+
   return workspaceRole === "admin" || clubRole === "owner"
 }
 
 function membershipStateForViewer({
+  kind,
   access,
   workspaceRole,
   clubRole,
   hasPendingRequest,
 }: {
+  kind: "channel" | "dm"
   access: ChannelAccess
   workspaceRole: "admin" | "member"
   clubRole: ClubRole | null
   hasPendingRequest: boolean
 }): MembershipState {
+  if (kind === "dm") {
+    return clubRole ? "member" : "notMember"
+  }
+
   if (workspaceRole === "admin") {
     return "admin"
   }
@@ -457,15 +556,128 @@ function membershipStateForViewer({
 }
 
 function canAccessConversation({
+  kind,
   access,
   workspaceRole,
   clubRole,
 }: {
+  kind: "channel" | "dm"
   access: ChannelAccess
   workspaceRole: "admin" | "member"
   clubRole: ClubRole | null
 }) {
+  if (kind === "dm") {
+    return clubRole !== null
+  }
+
   return access === "public" || workspaceRole === "admin" || clubRole !== null
+}
+
+async function getConversationReadState(
+  ctx: ReadCtx | MutationCtx,
+  conversationId: Id<"conversations">,
+  userId: Id<"users">
+) {
+  return await ctx.db
+    .query("conversationReads")
+    .withIndex("by_conversation_and_user", (q) =>
+      q.eq("conversationId", conversationId).eq("userId", userId)
+    )
+    .unique()
+}
+
+async function findDirectMessageConversation(
+  ctx: ReadCtx | MutationCtx,
+  workspaceId: Id<"workspaces">,
+  leftUserId: Id<"users">,
+  rightUserId: Id<"users">
+) {
+  const conversations = await ctx.db
+    .query("conversations")
+    .withIndex("by_workspace_and_slug", (q) => q.eq("workspaceId", workspaceId))
+    .collect()
+  const directMessages = conversations.filter((conversation) => conversation.kind === "dm")
+
+  for (const conversation of directMessages) {
+    const members = await listConversationMembershipDocs(ctx, conversation._id)
+
+    if (
+      members.length === 2 &&
+      members.some((membership) => membership.userId === leftUserId) &&
+      members.some((membership) => membership.userId === rightUserId)
+    ) {
+      return conversation
+    }
+  }
+
+  return null
+}
+
+async function listMentionableUsers(
+  ctx: ReadCtx | MutationCtx,
+  workspace: Doc<"workspaces">,
+  conversation: Doc<"conversations">
+) {
+  if (conversation.slug === "general") {
+    const workspaceMembers = await ctx.db
+      .query("workspaceMembers")
+      .withIndex("by_workspace_and_role", (q) => q.eq("workspaceId", workspace._id))
+      .collect()
+
+    return await Promise.all(
+      workspaceMembers.map(async (member) => ({
+        userId: member.userId,
+        user: await ctx.db.get(member.userId),
+      }))
+    )
+  }
+
+  const memberships = await listConversationMembershipDocs(ctx, conversation._id)
+
+  return await Promise.all(
+    memberships.map(async (membership) => ({
+      userId: membership.userId,
+      user: await ctx.db.get(membership.userId),
+    }))
+  )
+}
+
+async function findMentionedUserIds(
+  ctx: ReadCtx | MutationCtx,
+  workspace: Doc<"workspaces">,
+  conversation: Doc<"conversations">,
+  body: string,
+  excludedUserId: Id<"users">
+) {
+  const mentionMatches = Array.from(body.matchAll(/@([a-z0-9._-]+)/gi))
+  const mentionTokens = new Set(
+    mentionMatches
+      .map((match) => normalizeMentionToken(match[1] ?? ""))
+      .filter(Boolean)
+  )
+
+  if (mentionTokens.size === 0) {
+    return []
+  }
+
+  const candidates = await listMentionableUsers(ctx, workspace, conversation)
+  const mentioned = new Set<Id<"users">>()
+
+  for (const candidate of candidates) {
+    if (!candidate.user || candidate.userId === excludedUserId) {
+      continue
+    }
+
+    const candidateTokens = buildMentionTokens(candidate.user)
+
+    for (const token of mentionTokens) {
+      if (candidateTokens.has(token)) {
+        mentioned.add(candidate.userId)
+      }
+    }
+  }
+
+  return Array.from(mentioned)
 }
 
 async function listConversationMembers(
@@ -599,7 +811,7 @@ async function requireConversationManager(
     ? resolveConversationMemberRole(conversation, membership)
     : null
 
-  if (!canManageConversation({ workspaceRole, clubRole })) {
+  if (!canManageConversation({ kind: conversation.kind, workspaceRole, clubRole })) {
     throw new Error("Only club managers can perform this action.")
   }
 
@@ -619,6 +831,7 @@ async function requireConversationRoleEditor(
 
   if (
     !canEditConversationRoles({
+      kind: conversation.kind,
       workspaceRole: manager.workspaceRole,
       clubRole: manager.clubRole,
     })
@@ -652,24 +865,49 @@ export const listChannels = queryGeneric({
       .withIndex("by_workspace_and_slug", (q) => q.eq("workspaceId", workspace._id))
       .collect()
     const channels = conversations.filter((conversation) => conversation.kind === "channel")
+    const directMessages = conversations.filter((conversation) => conversation.kind === "dm")
     const messages = await ctx.db
       .query("messages")
       .withIndex("by_workspace_and_created_at", (q) =>
         q.eq("workspaceId", workspace._id)
       )
       .collect()
+    const readStates =
+      currentUser !== null
+        ? await ctx.db
+            .query("conversationReads")
+            .withIndex("by_user_and_workspace", (q) =>
+              q.eq("userId", currentUser._id).eq("workspaceId", workspace._id)
+            )
+            .collect()
+        : []
+    const readAtByConversationId = new Map(
+      readStates.map((readState) => [String(readState.conversationId), readState.lastReadAt])
+    )
     const statsByConversationId = new Map<
       string,
-      { count: number; lastMessageAt: number | null }
+      {
+        count: number
+        lastMessageAt: number | null
+        unreadCount: number
+        preview: string | null
+      }
     >()
 
     for (const message of messages) {
       const key = String(message.conversationId)
       const existing = statsByConversationId.get(key)
+      const readAt = readAtByConversationId.get(key) ?? 0
+      const unreadCount =
+        currentUser && message.authorId !== currentUser._id && message.createdAt > readAt
+          ? 1
+          : 0
 
       statsByConversationId.set(key, {
         count: (existing?.count ?? 0) + 1,
         lastMessageAt: Math.max(existing?.lastMessageAt ?? 0, message.createdAt),
+        unreadCount: (existing?.unreadCount ?? 0) + unreadCount,
+        preview: message.body,
       })
     }
 
@@ -703,6 +941,7 @@ export const listChannels = queryGeneric({
           messageCount: stats?.count ?? 0,
           lastMessageAt: stats?.lastMessageAt ?? channel.createdAt ?? null,
           membershipState: membershipStateForViewer({
+            kind: channel.kind,
             access,
             workspaceRole,
             clubRole: viewerClubRole,
@@ -710,10 +949,12 @@ export const listChannels = queryGeneric({
           }),
           viewerClubRole,
           canManage: canManageConversation({
+            kind: channel.kind,
             workspaceRole,
             clubRole: viewerClubRole,
           }),
           canOpen: canAccessConversation({
+            kind: channel.kind,
             access,
             workspaceRole,
             clubRole: viewerClubRole,
@@ -728,9 +969,47 @@ export const listChannels = queryGeneric({
             workspaceRole !== "admin" &&
             !viewerClubRole &&
             joinRequest?.status !== "pending",
+          unreadCount: stats?.unreadCount ?? 0,
         }
       })
     )
+
+    const directMessagesWithMeta =
+      currentUser === null
+        ? []
+        : (
+            await Promise.all(
+              directMessages.map(async (conversation) => {
+                const membership = await getConversationMembership(
+                  ctx,
+                  conversation._id,
+                  currentUser._id
+                )
+
+                if (!membership) {
+                  return null
+                }
+
+                const members = await listConversationMembershipDocs(ctx, conversation._id)
+                const otherMembership =
+                  members.find((entry) => entry.userId !== currentUser._id) ?? membership
+                const otherUser = await ctx.db.get(otherMembership.userId)
+                const stats = statsByConversationId.get(String(conversation._id))
+
+                return {
+                  id: String(conversation._id),
+                  slug: conversation.slug,
+                  name: getDisplayNameFromUser(otherUser),
+                  imageUrl: otherUser?.imageUrl ?? null,
+                  preview: stats?.preview ?? "No messages yet",
+                  lastMessageAt: stats?.lastMessageAt ?? conversation.createdAt ?? null,
+                  unreadCount: stats?.unreadCount ?? 0,
+                }
+              })
+            )
+          )
+            .filter((conversation) => conversation !== null)
+            .sort((left, right) => (right.lastMessageAt ?? 0) - (left.lastMessageAt ?? 0))
 
     channelsWithMeta.sort((left, right) => {
       const leftLastMessageAt = left.lastMessageAt ?? 0
@@ -742,6 +1021,7 @@ export const listChannels = queryGeneric({
     return {
       currentRole: workspaceRole,
       channels: channelsWithMeta,
+      directMessages: directMessagesWithMeta,
     }
   },
 })
@@ -778,16 +1058,20 @@ export const conversation = queryGeneric({
       ? resolveConversationMemberRole(convo, membership)
       : null
     const canManage = canManageConversation({
+      kind: convo.kind,
       workspaceRole,
       clubRole: viewerClubRole,
     })
     const canEditRoles =
+      convo.kind === "channel" &&
       access === "members" &&
       canEditConversationRoles({
+        kind: convo.kind,
         workspaceRole,
         clubRole: viewerClubRole,
       })
     const canViewMessages = canAccessConversation({
+      kind: convo.kind,
       access,
       workspaceRole,
       clubRole: viewerClubRole,
@@ -847,6 +1131,7 @@ export const conversation = queryGeneric({
       viewerClubRole,
       memberCount: convo.slug === "general" ? null : members.length,
       viewerMembershipState: membershipStateForViewer({
+        kind: convo.kind,
         access,
         workspaceRole,
         clubRole: viewerClubRole,
@@ -855,16 +1140,19 @@ export const conversation = queryGeneric({
       canViewMessages,
       canPostMessages: canViewMessages,
       canJoin:
+        convo.kind === "channel" &&
         convo.slug !== "general" &&
         access === "public" &&
         workspaceRole !== "admin" &&
         viewerClubRole === null,
       canRequestToJoin:
+        convo.kind === "channel" &&
         access === "members" &&
         workspaceRole !== "admin" &&
         !viewerClubRole &&
         joinRequest?.status !== "pending",
       canLeave:
+        convo.kind === "channel" &&
         convo.slug !== "general" &&
         viewerClubRole !== null &&
         (access === "public" || workspaceRole !== "admin"),
@@ -913,6 +1201,7 @@ export const listMessages = queryGeneric({
 
     if (
       !canAccessConversation({
+        kind: convo.kind,
         access: resolveConversationAccess(convo),
         workspaceRole,
         clubRole,
@@ -991,14 +1280,26 @@ export const clubOperations = queryGeneric({
       ? resolveConversationMemberRole(convo, membership)
       : null
     const canManage = canManageConversation({
+      kind: convo.kind,
       workspaceRole,
       clubRole: viewerClubRole,
     })
     const canParticipate = canAccessConversation({
+      kind: convo.kind,
       access,
       workspaceRole,
       clubRole: viewerClubRole,
     })
+    if (convo.kind === "dm") {
+      return {
+        canManage: false,
+        canParticipate,
+        clubName: convo.name,
+        workspaceName: workspace.name,
+        events: [],
+        polls: [],
+      }
+    }
     const events = await ctx.db
       .query("clubEvents")
       .withIndex("by_conversation_and_created_at", (q) =>
@@ -1255,6 +1556,20 @@ export const createClubEvent = mutationGeneric({
       createdByUserId: manager.user._id,
     })
 
+    const memberships = await listConversationMembershipDocs(ctx, convo._id)
+
+    await createNotifications(ctx, {
+      workspaceId: workspace._id,
+      recipientUserIds: memberships.map((membership) => membership.userId),
+      kind: "clubEvent",
+      title: `New ${convo.name} event: ${title}`,
+      body: `${args.date} · ${time} · ${location}`,
+      route: `/channels/${convo.slug}`,
+      actorUserId: manager.user._id,
+      conversationId: convo._id,
+      eventId,
+    })
+
     return {
       eventId: String(eventId),
     }
@@ -1287,7 +1602,7 @@ export const joinClubEvent = mutationGeneric({
     const membership = await getConversationMembership(ctx, convo._id, user._id)
     const clubRole = membership ? resolveConversationMemberRole(convo, membership) : null
 
-    if (!canAccessConversation({ access, workspaceRole, clubRole })) {
+    if (!canAccessConversation({ kind: convo.kind, access, workspaceRole, clubRole })) {
       throw new Error("Join this club space before claiming an event ticket.")
     }
 
@@ -1502,7 +1817,7 @@ export const voteOnClubPoll = mutationGeneric({
     const membership = await getConversationMembership(ctx, convo._id, user._id)
     const clubRole = membership ? resolveConversationMemberRole(convo, membership) : null
 
-    if (!canAccessConversation({ access, workspaceRole, clubRole })) {
+    if (!canAccessConversation({ kind: convo.kind, access, workspaceRole, clubRole })) {
       throw new Error("Join this club space before voting in club polls.")
     }
 
@@ -1978,6 +2293,7 @@ export const removeMember = mutationGeneric({
     if (
       targetRole === "owner" &&
       !canEditConversationRoles({
+        kind: convo.kind,
         workspaceRole: manager.workspaceRole,
         clubRole: manager.clubRole,
       })
@@ -2094,6 +2410,7 @@ export const sendMessage = mutationGeneric({
 
     if (
       !canAccessConversation({
+        kind: convo.kind,
         access: resolveConversationAccess(convo),
         workspaceRole,
         clubRole,
@@ -2103,18 +2420,18 @@ export const sendMessage = mutationGeneric({
     }
 
     const discussionSections =
-      convo.slug === "general"
+      convo.slug === "general" || convo.kind === "dm"
         ? []
         : await ensureStoredDiscussionSections(ctx, workspace._id, convo, user._id)
     const selectedSection =
-      convo.slug === "general"
+      convo.slug === "general" || convo.kind === "dm"
         ? null
         : discussionSections.find((section) => section.slug === args.sectionSlug) ??
           discussionSections.find((section) => section.slug === "general") ??
           discussionSections[0] ??
           null
 
-    if (convo.slug !== "general" && !selectedSection) {
+    if (convo.slug !== "general" && convo.kind !== "dm" && !selectedSection) {
       throw new Error("This club does not have a discussion section yet.")
     }
 
@@ -2126,6 +2443,176 @@ export const sendMessage = mutationGeneric({
       body: trimmed,
       createdAt: Date.now(),
     })
+
+    if (convo.kind === "dm") {
+      const memberships = await listConversationMembershipDocs(ctx, convo._id)
+
+      await createNotifications(ctx, {
+        workspaceId: workspace._id,
+        recipientUserIds: memberships.map((membership) => membership.userId),
+        kind: "dm",
+        title: `New message from ${getDisplayNameFromUser(user)}`,
+        body: trimmed,
+        route: `/channels/${convo.slug}`,
+        actorUserId: user._id,
+        conversationId: convo._id,
+      })
+    } else {
+      const mentionedUserIds = await findMentionedUserIds(
+        ctx,
+        workspace,
+        convo,
+        trimmed,
+        user._id
+      )
+
+      if (mentionedUserIds.length) {
+        await createNotifications(ctx, {
+          workspaceId: workspace._id,
+          recipientUserIds: mentionedUserIds,
+          kind: "mention",
+          title: `${getDisplayNameFromUser(user)} mentioned you`,
+          body: trimmed,
+          route: selectedSection
+            ? `/channels/${convo.slug}/${selectedSection.slug}`
+            : `/channels/${convo.slug}`,
+          actorUserId: user._id,
+          conversationId: convo._id,
+        })
+      }
+    }
+
+    return null
+  },
+})
+
+export const createDirectMessage = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    userId: v.id("users"),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const { user } = await syncCurrentWorkspaceMember(ctx, workspace)
+
+    if (user._id === args.userId) {
+      throw new Error("Choose another member to start a direct message.")
+    }
+
+    const targetWorkspaceMembership = await getWorkspaceMember(
+      ctx,
+      workspace._id,
+      args.userId
+    )
+
+    if (!targetWorkspaceMembership) {
+      throw new Error("That member is not part of this campus space.")
+    }
+
+    const existingConversation = await findDirectMessageConversation(
+      ctx,
+      workspace._id,
+      user._id,
+      args.userId
+    )
+
+    if (existingConversation) {
+      return {
+        slug: existingConversation.slug,
+      }
+    }
+
+    const targetUser = await ctx.db.get(args.userId)
+    const slug = `dm-${[String(user._id), String(args.userId)].sort().join("-")}`
+    const conversationId = await ctx.db.insert("conversations", {
+      workspaceId: workspace._id,
+      slug,
+      name: getDisplayNameFromUser(targetUser),
+      description: "Private conversation between workspace members.",
+      category: "Direct message",
+      kind: "dm",
+      access: "members",
+      createdByUserId: user._id,
+      createdAt: Date.now(),
+    })
+    const conversation = (await ctx.db.get(conversationId))!
+
+    await upsertConversationMembership(ctx, {
+      workspaceId: workspace._id,
+      conversation,
+      userId: user._id,
+      role: "member",
+    })
+    await upsertConversationMembership(ctx, {
+      workspaceId: workspace._id,
+      conversation,
+      userId: args.userId,
+      role: "member",
+    })
+
+    return {
+      slug,
+    }
+  },
+})
+
+export const markConversationRead = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      return null
+    }
+
+    const { user, role: workspaceRole } = await syncCurrentWorkspaceMember(ctx, workspace)
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      return null
+    }
+
+    const membership = await getConversationMembership(ctx, convo._id, user._id)
+    const clubRole = membership ? resolveConversationMemberRole(convo, membership) : null
+
+    if (
+      !canAccessConversation({
+        kind: convo.kind,
+        access: resolveConversationAccess(convo),
+        workspaceRole,
+        clubRole,
+      })
+    ) {
+      return null
+    }
+
+    const existingReadState = await getConversationReadState(ctx, convo._id, user._id)
+    const lastReadAt = Date.now()
+
+    if (existingReadState) {
+      await ctx.db.patch(existingReadState._id, {
+        lastReadAt,
+      })
+    } else {
+      await ctx.db.insert("conversationReads", {
+        workspaceId: workspace._id,
+        conversationId: convo._id,
+        userId: user._id,
+        lastReadAt,
+      })
+    }
 
     return null
   },
