@@ -77,10 +77,19 @@ type AppSidebarProps = {
 }
 
 function sidebarChannelMeta(
-  membershipState: "public" | "admin" | "member" | "pending" | "notMember"
+  membershipState:
+    | "public"
+    | "admin"
+    | "owner"
+    | "officer"
+    | "member"
+    | "pending"
+    | "notMember"
 ) {
   if (membershipState === "public") return "open"
   if (membershipState === "admin") return "admin"
+  if (membershipState === "owner") return "owner"
+  if (membershipState === "officer") return "officer"
   if (membershipState === "member") return "joined"
   if (membershipState === "pending") return "pending"
   return "join"

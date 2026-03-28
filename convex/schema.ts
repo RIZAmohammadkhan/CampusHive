@@ -4,6 +4,11 @@ import { v } from "convex/values"
 const workspaceRole = v.union(v.literal("admin"), v.literal("member"))
 const conversationKind = v.union(v.literal("channel"), v.literal("dm"))
 const conversationAccess = v.union(v.literal("public"), v.literal("members"))
+const conversationMemberRole = v.union(
+  v.literal("owner"),
+  v.literal("officer"),
+  v.literal("member")
+)
 const joinRequestStatus = v.union(
   v.literal("pending"),
   v.literal("approved"),
@@ -63,6 +68,7 @@ export default defineSchema({
     workspaceId: v.id("workspaces"),
     conversationId: v.id("conversations"),
     userId: v.id("users"),
+    role: v.optional(conversationMemberRole),
     joinedAt: v.number(),
   })
     .index("by_conversation_and_user", ["conversationId", "userId"])

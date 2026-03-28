@@ -26,6 +26,9 @@ import { convexApi } from "@/lib/convex-api"
 import { cn } from "@/lib/utils"
 import { workspacePath } from "@/lib/workspaces"
 
+const selectClassName =
+  "h-10 rounded-2xl border border-hairline bg-field/90 px-3 text-[13px] text-parchment outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/30"
+
 function formatMessageTime(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
@@ -41,13 +44,28 @@ function formatShortDate(timestamp: number) {
 }
 
 function membershipLabel(
-  membershipState: "public" | "admin" | "member" | "pending" | "notMember"
+  membershipState:
+    | "public"
+    | "admin"
+    | "owner"
+    | "officer"
+    | "member"
+    | "pending"
+    | "notMember"
 ) {
   if (membershipState === "public") return "Campus-wide access"
   if (membershipState === "admin") return "Institute admin access"
+  if (membershipState === "owner") return "Club owner"
+  if (membershipState === "officer") return "Club officer"
   if (membershipState === "member") return "Joined member"
   if (membershipState === "pending") return "Request pending"
   return "Join required"
+}
+
+function clubRoleLabel(role: "owner" | "officer" | "member") {
+  if (role === "owner") return "Owner"
+  if (role === "officer") return "Officer"
+  return "Member"
 }
 
 export function LiveChannelPage({
@@ -95,6 +113,7 @@ function LiveChannelPageInner({
   const reviewJoinRequest = useMutation(convexApi.chat.reviewJoinRequest)
   const leaveChannel = useMutation(convexApi.chat.leaveChannel)
   const removeMember = useMutation(convexApi.chat.removeMember)
+  const setMemberRole = useMutation(convexApi.chat.setMemberRole)
   const [message, setMessage] = useState("")
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -127,10 +146,12 @@ function LiveChannelPageInner({
   const viewerMembershipState =
     conversation.viewerMembershipState ??
     (access === "public" ? "public" : conversation.canManage ? "admin" : "notMember")
+  const viewerClubRole = conversation.viewerClubRole ?? null
   const canViewMessages = conversation.canViewMessages ?? (access === "public" || conversation.canManage)
   const canPostMessages = conversation.canPostMessages ?? canViewMessages
   const canRequestToJoin = conversation.canRequestToJoin ?? false
   const canLeave = conversation.canLeave ?? false
+  const canEditRoles = conversation.canEditRoles ?? false
   const memberCount = conversation.memberCount ?? null
   const members = conversation.members ?? []
   const pendingRequests = conversation.pendingRequests ?? []
@@ -334,9 +355,14 @@ function LiveChannelPageInner({
               <div className="rounded-2xl border border-hairline bg-surface/55 p-4">
                 <span className="inline-flex items-center gap-2 text-parchment">
                   <ShieldCheckIcon className="size-4 text-sage" />
-                  You can approve requests and remove members in this club space.
+                  {canEditRoles
+                    ? "You can review requests, manage members, and update club roles here."
+                    : "You can review requests and manage members in this club space."}
                 </span>
               </div>
+            ) : null}
+            {viewerClubRole ? (
+              <span className="do-pill">Your role: {clubRoleLabel(viewerClubRole)}</span>
             ) : null}
             {canRequestToJoin ? (
               <Button
@@ -392,6 +418,7 @@ function LiveChannelPageInner({
                           <p className="truncate text-[14px] font-medium text-cream">
                             {member.name}
                           </p>
+                          <span className="do-pill">{clubRoleLabel(member.role)}</span>
                           {member.isCurrentUser ? <span className="do-pill">You</span> : null}
                         </div>
                         <p className="mt-1 text-[12px] leading-6 text-tan">
@@ -399,26 +426,52 @@ function LiveChannelPageInner({
                         </p>
                       </div>
                       {conversation.canManage ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={isPending && pendingAction === `remove-${member.id}`}
-                          onClick={() =>
-                            runAction(
-                              `remove-${member.id}`,
-                              () =>
-                                removeMember({
-                                  workspaceSlug,
-                                  slug,
-                                  userId: member.id,
-                                }),
-                              "Member removed"
-                            )
-                          }
-                        >
-                          <UserMinusIcon className="size-4" />
-                          Remove
-                        </Button>
+                        <div className="flex min-w-[148px] flex-col gap-2">
+                          {canEditRoles ? (
+                            <select
+                              value={member.role}
+                              onChange={(event) =>
+                                runAction(
+                                  `role-${member.id}`,
+                                  () =>
+                                    setMemberRole({
+                                      workspaceSlug,
+                                      slug,
+                                      userId: member.id,
+                                      role: event.target.value as "owner" | "officer" | "member",
+                                    }),
+                                  "Club role updated"
+                                )
+                              }
+                              className={`${selectClassName} w-full`}
+                              disabled={isPending && pendingAction === `role-${member.id}`}
+                            >
+                              <option value="owner">Owner</option>
+                              <option value="officer">Officer</option>
+                              <option value="member">Member</option>
+                            </select>
+                          ) : null}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isPending && pendingAction === `remove-${member.id}`}
+                            onClick={() =>
+                              runAction(
+                                `remove-${member.id}`,
+                                () =>
+                                  removeMember({
+                                    workspaceSlug,
+                                    slug,
+                                    userId: member.id,
+                                  }),
+                                "Member removed"
+                              )
+                            }
+                          >
+                            <UserMinusIcon className="size-4" />
+                            Remove
+                          </Button>
+                        </div>
                       ) : null}
                     </div>
                   </div>

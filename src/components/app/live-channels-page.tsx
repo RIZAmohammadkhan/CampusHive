@@ -40,10 +40,19 @@ function formatActivity(timestamp: number | null) {
 }
 
 function membershipLabel(
-  membershipState: "public" | "admin" | "member" | "pending" | "notMember"
+  membershipState:
+    | "public"
+    | "admin"
+    | "owner"
+    | "officer"
+    | "member"
+    | "pending"
+    | "notMember"
 ) {
   if (membershipState === "public") return "Campus-wide"
   if (membershipState === "admin") return "Admin access"
+  if (membershipState === "owner") return "Club owner"
+  if (membershipState === "officer") return "Officer"
   if (membershipState === "member") return "Joined"
   if (membershipState === "pending") return "Request pending"
   return "Request required"

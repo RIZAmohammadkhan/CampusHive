@@ -68,7 +68,16 @@ export type ChannelListData = {
     memberCount: number
     messageCount: number
     lastMessageAt: number | null
-    membershipState: "public" | "admin" | "member" | "pending" | "notMember"
+    membershipState:
+      | "public"
+      | "admin"
+      | "owner"
+      | "officer"
+      | "member"
+      | "pending"
+      | "notMember"
+    viewerClubRole: "owner" | "officer" | "member" | null
+    canManage: boolean
     canOpen: boolean
     canRequestToJoin: boolean
   }>
@@ -81,8 +90,17 @@ export type ConversationData = {
   kind: "channel" | "dm"
   access: "public" | "members"
   canManage: boolean
+  canEditRoles: boolean
+  viewerClubRole: "owner" | "officer" | "member" | null
   memberCount: number | null
-  viewerMembershipState: "public" | "admin" | "member" | "pending" | "notMember"
+  viewerMembershipState:
+    | "public"
+    | "admin"
+    | "owner"
+    | "officer"
+    | "member"
+    | "pending"
+    | "notMember"
   canViewMessages: boolean
   canPostMessages: boolean
   canRequestToJoin: boolean
@@ -91,6 +109,7 @@ export type ConversationData = {
     id: string
     name: string
     imageUrl: string | null
+    role: "owner" | "officer" | "member"
     joinedAt: number
     isCurrentUser: boolean
   }>
@@ -245,6 +264,15 @@ export const convexApi = {
       { workspaceSlug: string; slug: string; userId: string },
       null
     >("chat:removeMember"),
+    setMemberRole: mutationRef<
+      {
+        workspaceSlug: string
+        slug: string
+        userId: string
+        role: "owner" | "officer" | "member"
+      },
+      null
+    >("chat:setMemberRole"),
     sendMessage: mutationRef<
       { workspaceSlug: string; slug: string; body: string },
       null

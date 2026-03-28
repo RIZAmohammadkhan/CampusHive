@@ -12,7 +12,8 @@ import { getWorkspaceBySlug } from "./lib/workspaces"
 import type { Doc, Id, MutationCtx, ReadCtx } from "./types"
 
 type ChannelAccess = "public" | "members"
-type MembershipState = "public" | "admin" | "member" | "pending" | "notMember"
+type ClubRole = "owner" | "officer" | "member"
+type MembershipState = "public" | "admin" | "owner" | "officer" | "member" | "pending" | "notMember"
 
 function normalizeChannelName(value: string) {
   return value.trim().replace(/\s+/g, " ")
@@ -35,6 +36,17 @@ function fallbackNameForSlug(slug: string) {
 
 function resolveConversationAccess(conversation: Doc<"conversations">): ChannelAccess {
   return conversation.access ?? (conversation.slug === "general" ? "public" : "members")
+}
+
+function resolveConversationMemberRole(
+  conversation: Doc<"conversations">,
+  membership: Doc<"conversationMembers">
+): ClubRole {
+  if (membership.role) {
+    return membership.role
+  }
+
+  return conversation.createdByUserId === membership.userId ? "owner" : "member"
 }
 
 async function findConversation(
@@ -93,43 +105,137 @@ async function getConversationJoinRequest(
     .unique()
 }
 
+async function listConversationMembershipDocs(
+  ctx: ReadCtx | MutationCtx,
+  conversationId: Id<"conversations">
+) {
+  return await ctx.db
+    .query("conversationMembers")
+    .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
+    .collect()
+}
+
 async function upsertConversationMembership(
   ctx: MutationCtx,
   {
     workspaceId,
-    conversationId,
+    conversation,
     userId,
+    role = "member",
   }: {
     workspaceId: Id<"workspaces">
-    conversationId: Id<"conversations">
+    conversation: Doc<"conversations">
     userId: Id<"users">
+    role?: ClubRole
   }
 ) {
-  const existing = await getConversationMembership(ctx, conversationId, userId)
+  const existing = await getConversationMembership(ctx, conversation._id, userId)
 
   if (existing) {
-    return existing
+    await ctx.db.patch(existing._id, {
+      role,
+    })
+    return (await ctx.db.get(existing._id))!
   }
 
   const membershipId = await ctx.db.insert("conversationMembers", {
     workspaceId,
-    conversationId,
+    conversationId: conversation._id,
     userId,
+    role,
     joinedAt: Date.now(),
   })
 
   return (await ctx.db.get(membershipId))!
 }
 
+async function countOwners(
+  ctx: ReadCtx | MutationCtx,
+  conversation: Doc<"conversations">
+) {
+  const memberships = await listConversationMembershipDocs(ctx, conversation._id)
+
+  return memberships.filter(
+    (membership) => resolveConversationMemberRole(conversation, membership) === "owner"
+  ).length
+}
+
+function canManageConversation({
+  workspaceRole,
+  clubRole,
+}: {
+  workspaceRole: "admin" | "member"
+  clubRole: ClubRole | null
+}) {
+  return workspaceRole === "admin" || clubRole === "owner" || clubRole === "officer"
+}
+
+function canEditConversationRoles({
+  workspaceRole,
+  clubRole,
+}: {
+  workspaceRole: "admin" | "member"
+  clubRole: ClubRole | null
+}) {
+  return workspaceRole === "admin" || clubRole === "owner"
+}
+
+function membershipStateForViewer({
+  access,
+  workspaceRole,
+  clubRole,
+  hasPendingRequest,
+}: {
+  access: ChannelAccess
+  workspaceRole: "admin" | "member"
+  clubRole: ClubRole | null
+  hasPendingRequest: boolean
+}): MembershipState {
+  if (access === "public") {
+    return "public"
+  }
+
+  if (workspaceRole === "admin") {
+    return "admin"
+  }
+
+  if (clubRole === "owner") {
+    return "owner"
+  }
+
+  if (clubRole === "officer") {
+    return "officer"
+  }
+
+  if (clubRole === "member") {
+    return "member"
+  }
+
+  if (hasPendingRequest) {
+    return "pending"
+  }
+
+  return "notMember"
+}
+
+function canAccessConversation({
+  access,
+  workspaceRole,
+  clubRole,
+}: {
+  access: ChannelAccess
+  workspaceRole: "admin" | "member"
+  clubRole: ClubRole | null
+}) {
+  return access === "public" || workspaceRole === "admin" || clubRole !== null
+}
+
 async function listConversationMembers(
   ctx: ReadCtx,
-  conversationId: Id<"conversations">,
+  conversation: Doc<"conversations">,
   currentUserId?: Id<"users">
 ) {
-  const memberships = await ctx.db
-    .query("conversationMembers")
-    .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
-    .collect()
+  const memberships = await listConversationMembershipDocs(ctx, conversation._id)
 
   const members = await Promise.all(
     memberships.map(async (membership) => {
@@ -139,6 +245,7 @@ async function listConversationMembers(
         id: String(membership.userId),
         name: user?.name ?? "Student member",
         imageUrl: user?.imageUrl ?? null,
+        role: resolveConversationMemberRole(conversation, membership),
         joinedAt: membership.joinedAt,
         isCurrentUser: currentUserId === membership.userId,
       }
@@ -146,6 +253,12 @@ async function listConversationMembers(
   )
 
   members.sort((left, right) => {
+    const rank = { owner: 0, officer: 1, member: 2 }
+
+    if (rank[left.role] !== rank[right.role]) {
+      return rank[left.role] - rank[right.role]
+    }
+
     if (left.isCurrentUser !== right.isCurrentUser) {
       return left.isCurrentUser ? -1 : 1
     }
@@ -184,46 +297,45 @@ async function listPendingJoinRequests(
   return pending
 }
 
-function membershipStateForViewer({
-  access,
-  isAdmin,
-  isMember,
-  hasPendingRequest,
-}: {
-  access: ChannelAccess
-  isAdmin: boolean
-  isMember: boolean
-  hasPendingRequest: boolean
-}): MembershipState {
-  if (access === "public") {
-    return "public"
+async function requireConversationManager(
+  ctx: MutationCtx,
+  workspace: Doc<"workspaces">,
+  conversation: Doc<"conversations">
+) {
+  const { role: workspaceRole, user } = await syncCurrentWorkspaceMember(ctx, workspace)
+  const membership = await getConversationMembership(ctx, conversation._id, user._id)
+  const clubRole = membership
+    ? resolveConversationMemberRole(conversation, membership)
+    : null
+
+  if (!canManageConversation({ workspaceRole, clubRole })) {
+    throw new Error("Only club managers can perform this action.")
   }
 
-  if (isAdmin) {
-    return "admin"
+  return {
+    user,
+    workspaceRole,
+    clubRole,
   }
-
-  if (isMember) {
-    return "member"
-  }
-
-  if (hasPendingRequest) {
-    return "pending"
-  }
-
-  return "notMember"
 }
 
-function canAccessConversation({
-  access,
-  isAdmin,
-  isMember,
-}: {
-  access: ChannelAccess
-  isAdmin: boolean
-  isMember: boolean
-}) {
-  return access === "public" || isAdmin || isMember
+async function requireConversationRoleEditor(
+  ctx: MutationCtx,
+  workspace: Doc<"workspaces">,
+  conversation: Doc<"conversations">
+) {
+  const manager = await requireConversationManager(ctx, workspace, conversation)
+
+  if (
+    !canEditConversationRoles({
+      workspaceRole: manager.workspaceRole,
+      clubRole: manager.clubRole,
+    })
+  ) {
+    throw new Error("Only club owners can change club roles.")
+  }
+
+  return manager
 }
 
 export const listChannels = queryGeneric({
@@ -239,7 +351,7 @@ export const listChannels = queryGeneric({
       return null
     }
 
-    const { currentUser, role } = await getWorkspaceViewer(ctx, workspace)
+    const { currentUser, role: workspaceRole } = await getWorkspaceViewer(ctx, workspace)
     const workspaceMembers = await ctx.db
       .query("workspaceMembers")
       .withIndex("by_workspace_and_role", (q) => q.eq("workspaceId", workspace._id))
@@ -273,10 +385,7 @@ export const listChannels = queryGeneric({
     const channelsWithMeta = await Promise.all(
       channels.map(async (channel) => {
         const access = resolveConversationAccess(channel)
-        const conversationMembers = await ctx.db
-          .query("conversationMembers")
-          .withIndex("by_conversation", (q) => q.eq("conversationId", channel._id))
-          .collect()
+        const conversationMembers = await listConversationMembershipDocs(ctx, channel._id)
         const membership = currentUser
           ? await getConversationMembership(ctx, channel._id, currentUser._id)
           : null
@@ -284,12 +393,9 @@ export const listChannels = queryGeneric({
           ? await getConversationJoinRequest(ctx, channel._id, currentUser._id)
           : null
         const stats = statsByConversationId.get(String(channel._id))
-        const membershipState = membershipStateForViewer({
-          access,
-          isAdmin: role === "admin",
-          isMember: Boolean(membership),
-          hasPendingRequest: joinRequest?.status === "pending",
-        })
+        const viewerClubRole = membership
+          ? resolveConversationMemberRole(channel, membership)
+          : null
 
         return {
           id: String(channel._id),
@@ -301,16 +407,26 @@ export const listChannels = queryGeneric({
             access === "public" ? workspaceMembers.length : conversationMembers.length,
           messageCount: stats?.count ?? 0,
           lastMessageAt: stats?.lastMessageAt ?? channel.createdAt ?? null,
-          membershipState,
+          membershipState: membershipStateForViewer({
+            access,
+            workspaceRole,
+            clubRole: viewerClubRole,
+            hasPendingRequest: joinRequest?.status === "pending",
+          }),
+          viewerClubRole,
+          canManage: canManageConversation({
+            workspaceRole,
+            clubRole: viewerClubRole,
+          }),
           canOpen: canAccessConversation({
             access,
-            isAdmin: role === "admin",
-            isMember: Boolean(membership),
+            workspaceRole,
+            clubRole: viewerClubRole,
           }),
           canRequestToJoin:
             access === "members" &&
-            role !== "admin" &&
-            !membership &&
+            workspaceRole !== "admin" &&
+            !viewerClubRole &&
             joinRequest?.status !== "pending",
         }
       })
@@ -324,7 +440,7 @@ export const listChannels = queryGeneric({
     })
 
     return {
-      currentRole: role,
+      currentRole: workspaceRole,
       channels: channelsWithMeta,
     }
   },
@@ -344,7 +460,7 @@ export const conversation = queryGeneric({
       return null
     }
 
-    const { currentUser, role } = await getWorkspaceViewer(ctx, workspace)
+    const { currentUser, role: workspaceRole } = await getWorkspaceViewer(ctx, workspace)
     const convo = await findConversation(ctx, workspace._id, args.slug)
 
     if (!convo) {
@@ -358,15 +474,26 @@ export const conversation = queryGeneric({
     const joinRequest = currentUser
       ? await getConversationJoinRequest(ctx, convo._id, currentUser._id)
       : null
+    const viewerClubRole = membership
+      ? resolveConversationMemberRole(convo, membership)
+      : null
+    const canManage = canManageConversation({
+      workspaceRole,
+      clubRole: viewerClubRole,
+    })
+    const canEditRoles = canEditConversationRoles({
+      workspaceRole,
+      clubRole: viewerClubRole,
+    })
     const canViewMessages = canAccessConversation({
       access,
-      isAdmin: role === "admin",
-      isMember: Boolean(membership),
+      workspaceRole,
+      clubRole: viewerClubRole,
     })
     const members =
-      access === "members" ? await listConversationMembers(ctx, convo._id, currentUser?._id) : []
+      access === "members" ? await listConversationMembers(ctx, convo, currentUser?._id) : []
     const pendingRequests =
-      role === "admin" && access === "members"
+      canManage && access === "members"
         ? await listPendingJoinRequests(ctx, convo._id)
         : []
 
@@ -376,22 +503,25 @@ export const conversation = queryGeneric({
       description: convo.description,
       kind: convo.kind,
       access,
-      canManage: role === "admin",
+      canManage,
+      canEditRoles,
+      viewerClubRole,
       memberCount: access === "public" ? null : members.length,
       viewerMembershipState: membershipStateForViewer({
         access,
-        isAdmin: role === "admin",
-        isMember: Boolean(membership),
+        workspaceRole,
+        clubRole: viewerClubRole,
         hasPendingRequest: joinRequest?.status === "pending",
       }),
       canViewMessages,
       canPostMessages: canViewMessages,
       canRequestToJoin:
         access === "members" &&
-        role !== "admin" &&
-        !membership &&
+        workspaceRole !== "admin" &&
+        !viewerClubRole &&
         joinRequest?.status !== "pending",
-      canLeave: access === "members" && role !== "admin" && Boolean(membership),
+      canLeave:
+        access === "members" && workspaceRole !== "admin" && viewerClubRole !== null,
       members,
       pendingRequests,
     }
@@ -412,23 +542,25 @@ export const listMessages = queryGeneric({
       return []
     }
 
-    const { currentUser, role } = await getWorkspaceViewer(ctx, workspace)
+    const { currentUser, role: workspaceRole } = await getWorkspaceViewer(ctx, workspace)
     const convo = await findConversation(ctx, workspace._id, args.slug)
 
     if (!convo) {
       return []
     }
 
-    const access = resolveConversationAccess(convo)
     const membership = currentUser
       ? await getConversationMembership(ctx, convo._id, currentUser._id)
+      : null
+    const clubRole = membership
+      ? resolveConversationMemberRole(convo, membership)
       : null
 
     if (
       !canAccessConversation({
-        access,
-        isAdmin: role === "admin",
-        isMember: Boolean(membership),
+        access: resolveConversationAccess(convo),
+        workspaceRole,
+        clubRole,
       })
     ) {
       return []
@@ -475,8 +607,8 @@ export const createChannel = mutationGeneric({
       throw new Error("Campus space not found.")
     }
 
-    const { role, user } = await syncCurrentWorkspaceMember(ctx, workspace)
-    assertWorkspaceAdmin(role)
+    const { role: workspaceRole, user } = await syncCurrentWorkspaceMember(ctx, workspace)
+    assertWorkspaceAdmin(workspaceRole)
 
     const name = normalizeChannelName(args.name)
     const description = args.description?.trim() ?? ""
@@ -512,10 +644,13 @@ export const createChannel = mutationGeneric({
       createdAt: Date.now(),
     })
 
+    const conversation = (await ctx.db.get(conversationId))!
+
     await upsertConversationMembership(ctx, {
       workspaceId: workspace._id,
-      conversationId,
+      conversation,
       userId: user._id,
+      role: "owner",
     })
 
     return {
@@ -539,7 +674,7 @@ export const requestToJoin = mutationGeneric({
       throw new Error("Campus space not found.")
     }
 
-    const { role, user } = await syncCurrentWorkspaceMember(ctx, workspace)
+    const { role: workspaceRole, user } = await syncCurrentWorkspaceMember(ctx, workspace)
     const convo = await findConversation(ctx, workspace._id, args.slug)
 
     if (!convo) {
@@ -550,7 +685,7 @@ export const requestToJoin = mutationGeneric({
       throw new Error("This campus channel is already open to everyone.")
     }
 
-    if (role === "admin") {
+    if (workspaceRole === "admin") {
       throw new Error("Institute admins already have access to every club space.")
     }
 
@@ -604,9 +739,6 @@ export const reviewJoinRequest = mutationGeneric({
       throw new Error("Campus space not found.")
     }
 
-    const { role, user } = await syncCurrentWorkspaceMember(ctx, workspace)
-    assertWorkspaceAdmin(role)
-
     const convo = await findConversation(ctx, workspace._id, args.slug)
 
     if (!convo) {
@@ -617,6 +749,7 @@ export const reviewJoinRequest = mutationGeneric({
       throw new Error("This campus channel does not use join requests.")
     }
 
+    const manager = await requireConversationManager(ctx, workspace, convo)
     const request = await getConversationJoinRequest(ctx, convo._id, args.userId)
 
     if (!request || request.status !== "pending") {
@@ -630,14 +763,15 @@ export const reviewJoinRequest = mutationGeneric({
       status: nextStatus,
       updatedAt: now,
       reviewedAt: now,
-      reviewedByUserId: user._id,
+      reviewedByUserId: manager.user._id,
     })
 
     if (args.approve) {
       await upsertConversationMembership(ctx, {
         workspaceId: workspace._id,
-        conversationId: convo._id,
+        conversation: convo,
         userId: args.userId,
+        role: "member",
       })
     }
 
@@ -659,7 +793,7 @@ export const leaveChannel = mutationGeneric({
       throw new Error("Campus space not found.")
     }
 
-    const { role, user } = await syncCurrentWorkspaceMember(ctx, workspace)
+    const { role: workspaceRole, user } = await syncCurrentWorkspaceMember(ctx, workspace)
     const convo = await findConversation(ctx, workspace._id, args.slug)
 
     if (!convo) {
@@ -670,7 +804,7 @@ export const leaveChannel = mutationGeneric({
       throw new Error("This campus channel does not require membership.")
     }
 
-    if (role === "admin") {
+    if (workspaceRole === "admin") {
       throw new Error("Institute admins keep access across all club spaces.")
     }
 
@@ -678,6 +812,12 @@ export const leaveChannel = mutationGeneric({
 
     if (!membership) {
       throw new Error("You are not a member of this club space.")
+    }
+
+    const clubRole = resolveConversationMemberRole(convo, membership)
+
+    if (clubRole === "owner" && (await countOwners(ctx, convo)) <= 1) {
+      throw new Error("Assign another club owner before leaving this club.")
     }
 
     await ctx.db.delete(membership._id)
@@ -700,9 +840,6 @@ export const removeMember = mutationGeneric({
       throw new Error("Campus space not found.")
     }
 
-    const { role } = await syncCurrentWorkspaceMember(ctx, workspace)
-    assertWorkspaceAdmin(role)
-
     const convo = await findConversation(ctx, workspace._id, args.slug)
 
     if (!convo) {
@@ -713,13 +850,91 @@ export const removeMember = mutationGeneric({
       throw new Error("This campus channel does not use club membership.")
     }
 
-    const membership = await getConversationMembership(ctx, convo._id, args.userId)
+    const manager = await requireConversationManager(ctx, workspace, convo)
+    const targetMembership = await getConversationMembership(ctx, convo._id, args.userId)
 
-    if (!membership) {
+    if (!targetMembership) {
       throw new Error("That student is not a member of this club space.")
     }
 
-    await ctx.db.delete(membership._id)
+    const targetRole = resolveConversationMemberRole(convo, targetMembership)
+
+    if (
+      targetRole === "owner" &&
+      !canEditConversationRoles({
+        workspaceRole: manager.workspaceRole,
+        clubRole: manager.clubRole,
+      })
+    ) {
+      throw new Error("Only club owners can remove another owner.")
+    }
+
+    if (targetRole === "owner" && (await countOwners(ctx, convo)) <= 1) {
+      throw new Error("This club needs at least one owner.")
+    }
+
+    await ctx.db.delete(targetMembership._id)
+    return null
+  },
+})
+
+export const setMemberRole = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    userId: v.id("users"),
+    role: v.union(v.literal("owner"), v.literal("officer"), v.literal("member")),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    if (resolveConversationAccess(convo) === "public") {
+      throw new Error("This campus channel does not use club roles.")
+    }
+
+    const editor = await requireConversationRoleEditor(ctx, workspace, convo)
+    const targetMembership = await getConversationMembership(ctx, convo._id, args.userId)
+
+    if (!targetMembership) {
+      throw new Error("That student is not a member of this club space.")
+    }
+
+    const currentRole = resolveConversationMemberRole(convo, targetMembership)
+
+    if (
+      currentRole === "owner" &&
+      args.role !== "owner" &&
+      (await countOwners(ctx, convo)) <= 1
+    ) {
+      throw new Error("This club needs at least one owner.")
+    }
+
+    if (
+      editor.workspaceRole !== "admin" &&
+      editor.user._id === targetMembership.userId &&
+      currentRole === "owner" &&
+      args.role !== "owner" &&
+      (await countOwners(ctx, convo)) <= 1
+    ) {
+      throw new Error("Assign another owner before changing your role.")
+    }
+
+    await ctx.db.patch(targetMembership._id, {
+      role: args.role,
+    })
+
     return null
   },
 })
@@ -748,21 +963,23 @@ export const sendMessage = mutationGeneric({
       throw new Error("Messages must be 4,000 characters or fewer.")
     }
 
-    const { user, role } = await syncCurrentWorkspaceMember(ctx, workspace)
+    const { user, role: workspaceRole } = await syncCurrentWorkspaceMember(ctx, workspace)
     const convo = await findConversation(ctx, workspace._id, args.slug)
 
     if (!convo) {
       throw new Error("Club space not found.")
     }
 
-    const access = resolveConversationAccess(convo)
     const membership = await getConversationMembership(ctx, convo._id, user._id)
+    const clubRole = membership
+      ? resolveConversationMemberRole(convo, membership)
+      : null
 
     if (
       !canAccessConversation({
-        access,
-        isAdmin: role === "admin",
-        isMember: Boolean(membership),
+        access: resolveConversationAccess(convo),
+        workspaceRole,
+        clubRole,
       })
     ) {
       throw new Error("Join this club space before posting in it.")
