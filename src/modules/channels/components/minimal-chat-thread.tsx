@@ -102,12 +102,14 @@ export function MinimalChatThread({
                 ) : null}
               </div>
             </div>
-            {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
+            {headerAction ? (
+              <div className="w-full sm:w-auto sm:shrink-0">{headerAction}</div>
+            ) : null}
           </div>
 
           {threadLinks.length || threadLinksAction ? (
             <div className="mt-3">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 {threadLinks.length ? (
                   <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
                     {threadLinks.map((link) => (
@@ -128,7 +130,11 @@ export function MinimalChatThread({
                 ) : (
                   <div className="flex-1" />
                 )}
-                {threadLinksAction ? <div className="shrink-0">{threadLinksAction}</div> : null}
+                {threadLinksAction ? (
+                  <div className="w-full overflow-x-auto sm:w-auto sm:shrink-0">
+                    {threadLinksAction}
+                  </div>
+                ) : null}
               </div>
 
               {threadLinksPanel ? <div className="mt-3">{threadLinksPanel}</div> : null}
@@ -165,7 +171,7 @@ export function MinimalChatThread({
                         item.author.isCurrentUser ? "justify-end" : "justify-start"
                       )}
                     >
-                      <div className="max-w-[min(78%,680px)]">
+                      <div className="max-w-[min(90%,680px)] sm:max-w-[min(82%,680px)]">
                         <div
                           className={cn(
                             "mb-2 flex items-center gap-2 text-[11px] text-tan",
@@ -235,7 +241,7 @@ export function MinimalChatThread({
                   <Button
                     type="submit"
                     disabled={isPending || !draft.trim()}
-                    className="sm:shrink-0"
+                    className="w-full sm:w-auto sm:shrink-0"
                   >
                     Send
                   </Button>

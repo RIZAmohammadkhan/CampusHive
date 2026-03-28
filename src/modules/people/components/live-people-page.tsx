@@ -142,7 +142,7 @@ function LivePeoplePageInner({ workspaceSlug }: { workspaceSlug: string }) {
         <div className="divide-y divide-hairline">
           {members.map((member) => (
             <div key={member.id} className="px-5 py-4 sm:px-6">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <Link
                   href={workspacePersonPath(workspaceSlug, member.id)}
                   className="flex min-w-0 flex-1 items-center gap-3"
@@ -176,6 +176,7 @@ function LivePeoplePageInner({ workspaceSlug }: { workspaceSlug: string }) {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="w-full sm:w-auto"
                     disabled={isPending && pendingUserId === member.id}
                     onClick={() => messageMember(member.id)}
                   >

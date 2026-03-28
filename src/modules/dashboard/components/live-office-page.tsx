@@ -73,10 +73,10 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
   ].join(" · ")
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section className="do-surface overflow-hidden">
         <div className="border-b border-hairline px-5 py-5 sm:px-6">
-          <div className="flex items-end justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="do-eyebrow">Clubs</p>
               <h2 className="mt-2 text-[20px] font-medium text-cream">Active spaces</h2>
@@ -127,10 +127,10 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
             <div className="divide-y divide-hairline">
               {data.activeMembers.slice(0, 6).map((member) => (
                 <Link
-                  key={member.id}
-                  href={workspacePersonPath(workspaceSlug, member.id)}
-                  className="flex items-center justify-between gap-3 px-5 py-4 transition-colors hover:bg-active-row/70 sm:px-6"
-                >
+                key={member.id}
+                href={workspacePersonPath(workspaceSlug, member.id)}
+                className="flex items-start justify-between gap-3 px-5 py-4 transition-colors hover:bg-active-row/70 sm:px-6"
+              >
                   <div className="min-w-0">
                     <p className="truncate text-[14px] font-medium text-cream">
                       {member.name}

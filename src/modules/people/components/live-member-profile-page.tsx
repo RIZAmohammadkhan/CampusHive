@@ -147,7 +147,7 @@ function LiveMemberProfilePageInner({
   return (
     <div className="space-y-6">
       <section className="do-surface overflow-hidden p-6 md:p-8">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-3xl">
             <Link
               href={workspacePeoplePath(workspaceSlug)}
@@ -187,7 +187,7 @@ function LiveMemberProfilePageInner({
           </div>
 
           {!isCurrentUser ? (
-            <Button onClick={handleOpenMessage}>
+            <Button onClick={handleOpenMessage} className="w-full sm:w-auto">
               <MessageCircleIcon className="size-4" />
               Message {profile.firstName || profile.name}
             </Button>
@@ -195,7 +195,7 @@ function LiveMemberProfilePageInner({
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <main className="space-y-6">
           <section className="do-panel p-5">
             <p className="do-eyebrow">Profile</p>

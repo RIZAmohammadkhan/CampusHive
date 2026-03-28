@@ -1,11 +1,12 @@
 "use client"
 
 import { OrganizationSwitcher, useOrganization } from "@clerk/nextjs"
-import { ShieldCheckIcon } from "lucide-react"
+import { MenuIcon, ShieldCheckIcon } from "lucide-react"
 import { useConvexAuth, useQuery } from "convex/react"
 import { usePathname } from "next/navigation"
 
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
+import { Button } from "@/components/ui/button"
 import { WORKSPACE_HOME_PATTERN } from "@/lib/workspaces"
 import { workspaceApi } from "@/modules/workspace/api"
 import { NotificationCenter } from "@/modules/workspace/components/notification-center"
@@ -13,9 +14,15 @@ import { getWorkspaceSection } from "@/modules/workspace/sections"
 
 type AppTopbarProps = {
   workspaceSlug: string
+  onOpenSidebar?: () => void
+  mobileSidebarOpen?: boolean
 }
 
-export function AppTopbar({ workspaceSlug }: AppTopbarProps) {
+export function AppTopbar({
+  workspaceSlug,
+  onOpenSidebar,
+  mobileSidebarOpen = false,
+}: AppTopbarProps) {
   const pathname = usePathname() ?? "/"
   const enabled = useConvexConfigured()
   const { isAuthenticated } = useConvexAuth()
@@ -37,31 +44,54 @@ export function AppTopbar({ workspaceSlug }: AppTopbarProps) {
 
   return (
     <header className="sticky top-0 z-20 border-b border-hairline bg-background/88 backdrop-blur-xl">
-      <div className="mx-auto flex w-full max-w-[1360px] items-center justify-between gap-4 px-4 py-4 md:px-6 lg:px-6">
-        <div className="min-w-0">
-          <p className="do-eyebrow">{section.navLabel}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-[28px] font-light tracking-[-0.05em] text-parchment">
-              {section.title}
-            </h1>
-            <span className="do-pill do-pill-gold">
-              {organization?.slug ?? workspaceSlug}
-            </span>
-            <span className="do-pill do-pill-rose">
-              <ShieldCheckIcon className="size-3.5" />
-              {roleLabel}
-            </span>
+      <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6 lg:px-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-start gap-3">
+              {onOpenSidebar ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="mt-0.5 lg:hidden"
+                  onClick={onOpenSidebar}
+                  aria-label="Open navigation"
+                  aria-expanded={mobileSidebarOpen}
+                >
+                  <MenuIcon className="size-4" />
+                </Button>
+              ) : null}
+              <div className="min-w-0">
+                <p className="do-eyebrow">{section.navLabel}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <h1 className="truncate text-[24px] font-light tracking-[-0.05em] text-parchment sm:text-[28px]">
+                    {section.title}
+                  </h1>
+                  <span className="do-pill do-pill-gold">
+                    {organization?.slug ?? workspaceSlug}
+                  </span>
+                  <span className="do-pill do-pill-rose">
+                    <ShieldCheckIcon className="size-3.5" />
+                    {roleLabel}
+                  </span>
+                </div>
+                <p className="mt-2 max-w-3xl text-[13px] leading-6 text-tan">
+                  {section.subtitle}
+                </p>
+              </div>
+            </div>
           </div>
-          <p className="mt-2 text-[13px] text-tan">{section.subtitle}</p>
-        </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <NotificationCenter workspaceSlug={workspaceSlug} />
-          <OrganizationSwitcher
-            hidePersonal
-            afterCreateOrganizationUrl={WORKSPACE_HOME_PATTERN}
-            afterSelectOrganizationUrl={WORKSPACE_HOME_PATTERN}
-          />
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            <NotificationCenter workspaceSlug={workspaceSlug} />
+            <div className="max-w-full overflow-hidden rounded-[8px] border border-hairline bg-elevated/72 px-1 py-1">
+              <OrganizationSwitcher
+                hidePersonal
+                afterCreateOrganizationUrl={WORKSPACE_HOME_PATTERN}
+                afterSelectOrganizationUrl={WORKSPACE_HOME_PATTERN}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </header>

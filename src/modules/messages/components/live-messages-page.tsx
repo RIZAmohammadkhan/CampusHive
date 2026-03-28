@@ -118,7 +118,7 @@ function LiveMessagesPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section className="do-surface overflow-hidden">
         <div className="border-b border-hairline px-5 py-5 sm:px-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -148,7 +148,7 @@ function LiveMessagesPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                 href={workspaceMessagePath(workspaceSlug, conversation.slug)}
                 className="block px-5 py-4 transition-colors hover:bg-active-row/70 sm:px-6"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[13px] font-medium text-cream">
                     {conversation.name.charAt(0).toUpperCase()}
                   </div>
@@ -169,7 +169,7 @@ function LiveMessagesPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                     </p>
                   </div>
 
-                  <span className="shrink-0 text-[11px] text-tan">
+                  <span className="mt-0.5 shrink-0 text-[11px] text-tan">
                     {formatRelativeActivity(conversation.lastMessageAt)}
                   </span>
                 </div>
@@ -197,7 +197,7 @@ function LiveMessagesPageInner({ workspaceSlug }: { workspaceSlug: string }) {
             {members.map((member) => (
               <div
                 key={member.id}
-                className="flex items-center gap-3 px-5 py-4 sm:px-6"
+                className="flex flex-col gap-3 px-5 py-4 sm:px-6 sm:flex-row sm:items-center"
               >
                 <Link
                   href={workspacePersonPath(workspaceSlug, member.id)}
@@ -229,6 +229,7 @@ function LiveMessagesPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="w-full sm:w-auto"
                   disabled={isPending && pendingUserId === member.id}
                   onClick={() => startConversation(member.id)}
                 >

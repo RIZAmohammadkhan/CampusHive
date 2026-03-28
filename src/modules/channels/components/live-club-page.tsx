@@ -110,7 +110,7 @@ function ClubViewTabs({
   overviewActive: boolean
 }) {
   return (
-    <div className="inline-flex rounded-full border border-hairline bg-surface/55 p-1">
+    <div className="inline-flex w-full max-w-full overflow-x-auto rounded-full border border-hairline bg-surface/55 p-1 sm:w-auto">
       <Link
         href={overviewHref}
         className={cn(
@@ -168,7 +168,7 @@ function ClubHero({
 }) {
   return (
     <section className="do-surface overflow-hidden">
-      <div className="flex flex-col gap-5 px-6 py-6 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-5 px-5 py-5 sm:px-6 sm:py-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-3xl">
           <div className="flex flex-wrap items-center gap-2">
             <span className="do-pill">{category}</span>
@@ -178,7 +178,7 @@ function ClubHero({
               #{clubSlug}
             </span>
           </div>
-          <h1 className="mt-4 text-[30px] font-semibold tracking-tight text-cream">
+          <h1 className="mt-4 text-[26px] font-semibold tracking-tight text-cream sm:text-[30px]">
             {name}
           </h1>
           <p className="mt-3 text-[14px] leading-7 text-tan">{description}</p>
@@ -2173,105 +2173,104 @@ function LiveClubPageInner({
           onSubmit={handleCreateEvent}
         />
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <main className="space-y-6">
-          <ClubHero
-            clubSlug={clubSlug}
-            name={conversation.name}
-            description={conversation.description}
-            category={conversation.category}
-            accessLabel={accessLabel}
-            overviewActive
-            discussionHref={discussionHref}
-            overviewHref={overviewHref}
-            activityLabel={formatRelativeActivity(selectedSection?.lastMessageAt ?? null)}
-            membershipSummary={membershipSummary}
-            memberCount={memberCount}
-            eventCount={clubOps.events.length}
-            pollCount={clubOps.polls.length}
-          />
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
+          <main className="space-y-5 sm:space-y-6">
+            <ClubHero
+              clubSlug={clubSlug}
+              name={conversation.name}
+              description={conversation.description}
+              category={conversation.category}
+              accessLabel={accessLabel}
+              overviewActive
+              discussionHref={discussionHref}
+              overviewHref={overviewHref}
+              activityLabel={formatRelativeActivity(selectedSection?.lastMessageAt ?? null)}
+              membershipSummary={membershipSummary}
+              memberCount={memberCount}
+              eventCount={clubOps.events.length}
+              pollCount={clubOps.polls.length}
+            />
 
-          {!canViewMessages ? (
-            <section className="do-card p-6">
-              <p className="text-[16px] font-medium text-cream">
-                Join this club to unlock its discussion, events, and polls.
-              </p>
-              <div className="mt-5 flex flex-wrap gap-2">
-                {canJoin ? (
-                  <ActionButton
-                    label="Join club"
-                    disabled={isPending && pendingAction === "join-open-club"}
-                    onClick={() =>
-                      runAction(
-                        "join-open-club",
-                        () => joinOpenClub({ workspaceSlug, slug: clubSlug }),
-                        "You joined the club"
-                      )
-                    }
-                  />
-                ) : canRequestToJoin ? (
-                  <ActionButton
-                    label="Request to join"
-                    disabled={isPending && pendingAction === "request-to-join"}
-                    onClick={() =>
-                      runAction(
-                        "request-to-join",
-                        () => requestToJoin({ workspaceSlug, slug: clubSlug }),
-                        "Join request sent"
-                      )
-                    }
-                  />
-                ) : viewerMembershipState === "pending" ? (
-                  <span className="do-pill">Your request is waiting for review</span>
-                ) : null}
-              </div>
-            </section>
-          ) : null}
-
-          <section className="do-panel p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <p className="do-eyebrow">Discussion spaces</p>
-                <h3 className="mt-2 text-[24px] font-medium text-cream">Club channels</h3>
-                <p className="mt-2 text-[13px] leading-6 text-tan">
-                  Separate club info from live discussion and open the exact section you need.
+            {!canViewMessages ? (
+              <section className="do-card p-6">
+                <p className="text-[16px] font-medium text-cream">
+                  Join this club to unlock its discussion, events, and polls.
                 </p>
-              </div>
-            </div>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {canJoin ? (
+                    <ActionButton
+                      label="Join club"
+                      disabled={isPending && pendingAction === "join-open-club"}
+                      onClick={() =>
+                        runAction(
+                          "join-open-club",
+                          () => joinOpenClub({ workspaceSlug, slug: clubSlug }),
+                          "You joined the club"
+                        )
+                      }
+                    />
+                  ) : canRequestToJoin ? (
+                    <ActionButton
+                      label="Request to join"
+                      disabled={isPending && pendingAction === "request-to-join"}
+                      onClick={() =>
+                        runAction(
+                          "request-to-join",
+                          () => requestToJoin({ workspaceSlug, slug: clubSlug }),
+                          "Join request sent"
+                        )
+                      }
+                    />
+                  ) : viewerMembershipState === "pending" ? (
+                    <span className="do-pill">Your request is waiting for review</span>
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              {discussionSections.map((section) => (
-                <Link
-                  key={section.slug}
-                  href={workspaceClubDiscussionPath(workspaceSlug, clubSlug, section.slug)}
-                  className="do-card block p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-tan">
-                          <HashIcon className="size-3.5" />
-                        </span>
-                        <p className="truncate text-[15px] font-medium text-cream">
-                          {section.name}
+            <section className="do-panel p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="do-eyebrow">Discussion spaces</p>
+                  <h3 className="mt-2 text-[24px] font-medium text-cream">Club channels</h3>
+                  <p className="mt-2 text-[13px] leading-6 text-tan">
+                    Separate club info from live discussion and open the exact section you need.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                {discussionSections.map((section) => (
+                  <Link
+                    key={section.slug}
+                    href={workspaceClubDiscussionPath(workspaceSlug, clubSlug, section.slug)}
+                    className="do-card block p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-tan">
+                            <HashIcon className="size-3.5" />
+                          </span>
+                          <p className="truncate text-[15px] font-medium text-cream">
+                            {section.name}
+                          </p>
+                        </div>
+                        <p className="mt-3 text-[12px] leading-6 text-tan">
+                          {section.description ?? "Club discussion"}
                         </p>
                       </div>
-                      <p className="mt-3 text-[12px] leading-6 text-tan">
-                        {section.description ?? "Club discussion"}
-                      </p>
+                      <span className="do-pill shrink-0">{section.messageCount}</span>
                     </div>
-                    <span className="do-pill shrink-0">{section.messageCount}</span>
-                  </div>
-                  <p className="mt-4 text-[11px] tracking-[0.12em] text-tan uppercase">
-                    Activity {formatRelativeActivity(section.lastMessageAt)}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </section>
+                    <p className="mt-4 text-[11px] tracking-[0.12em] text-tan uppercase">
+                      Activity {formatRelativeActivity(section.lastMessageAt)}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            </section>
 
-          {clubOps.canParticipate ? (
-            <>
+            {clubOps.canParticipate ? (
               <section className="do-panel p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
@@ -2289,55 +2288,56 @@ function LiveClubPageInner({
                 </div>
 
                 <div className="mt-5 space-y-4">
-                    {clubOps.events.length ? (
-                      clubOps.events.map((event) => (
-                        <EventWorkflowCard
-                          key={event.id}
-                          workspaceSlug={workspaceSlug}
-                          clubSlug={clubSlug}
-                          event={event}
-                          members={members}
-                          canManage={clubOps.canManage}
-                          canParticipate={clubOps.canParticipate}
-                        />
-                      ))
-                    ) : (
-                      <div className="rounded-[24px] border border-dashed border-hairline bg-surface/55 p-5 text-[13px] leading-6 text-tan">
-                        No events yet.
-                      </div>
-                    )}
+                  {clubOps.events.length ? (
+                    clubOps.events.map((event) => (
+                      <EventWorkflowCard
+                        key={event.id}
+                        workspaceSlug={workspaceSlug}
+                        clubSlug={clubSlug}
+                        event={event}
+                        members={members}
+                        canManage={clubOps.canManage}
+                        canParticipate={clubOps.canParticipate}
+                      />
+                    ))
+                  ) : (
+                    <div className="rounded-[24px] border border-dashed border-hairline bg-surface/55 p-5 text-[13px] leading-6 text-tan">
+                      No events yet.
+                    </div>
+                  )}
                 </div>
               </section>
+            ) : null}
 
-            </>
-          ) : null}
-
-          <section className="do-panel p-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="do-eyebrow">Polls</p>
-                <h3 className="mt-2 text-[20px] font-medium text-cream">
-                  Use polls in channels
-                </h3>
-                <p className="mt-2 text-[13px] leading-6 text-tan">
-                  Open a discussion section to create and vote on polls in context.
-                </p>
+            <section className="do-panel p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="do-eyebrow">Polls</p>
+                  <h3 className="mt-2 text-[20px] font-medium text-cream">
+                    Use polls in channels
+                  </h3>
+                  <p className="mt-2 text-[13px] leading-6 text-tan">
+                    Open a discussion section to create and vote on polls in context.
+                  </p>
+                </div>
+                <Link
+                  href={discussionHref}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    "w-full justify-center sm:w-fit"
+                  )}
+                >
+                  Open discussion
+                </Link>
               </div>
-              <Link
-                href={discussionHref}
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-              >
-                Open discussion
-              </Link>
-            </div>
-          </section>
-	        </main>
-	
-	        <aside className="space-y-4">{membershipSidebar}</aside>
-	      </div>
-	      </>
-	    )
-	  }
+            </section>
+          </main>
+
+          <aside className="space-y-4 lg:sticky lg:top-[5.5rem]">{membershipSidebar}</aside>
+        </div>
+      </>
+    )
+  }
 
   if (!canViewMessages) {
     return (

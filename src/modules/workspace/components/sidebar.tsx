@@ -5,7 +5,9 @@ import { UserButton, useUser } from "@clerk/nextjs"
 import { useConvexAuth, useQuery } from "convex/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { PanelLeftCloseIcon } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { cn } from "@/lib/utils"
 import { workspacePath } from "@/lib/workspaces"
@@ -21,6 +23,7 @@ type SidebarLinkProps = {
   icon?: ReactNode
   badge?: string | null
   secondary?: string | null
+  onNavigate?: () => void
 }
 
 function CountBadge({
@@ -51,6 +54,7 @@ function SidebarLink({
   icon,
   badge,
   secondary,
+  onNavigate,
 }: SidebarLinkProps) {
   const pathname = usePathname() ?? "/"
   const isActive =
@@ -61,6 +65,7 @@ function SidebarLink({
   return (
     <Link
       href={href}
+      onClick={onNavigate}
       className={cn(
         "group relative flex items-center gap-3 rounded-[8px] px-3 py-2.5 text-[12px] font-medium tracking-[0.03em] text-tan transition-all duration-200 hover:bg-white/[0.04] hover:text-parchment",
         isActive &&
@@ -92,9 +97,15 @@ function SidebarLink({
 
 type AppSidebarProps = {
   workspaceSlug: string
+  onCloseMobileMenu?: () => void
+  showMobileClose?: boolean
 }
 
-export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
+export function AppSidebar({
+  workspaceSlug,
+  onCloseMobileMenu,
+  showMobileClose = false,
+}: AppSidebarProps) {
   const enabled = useConvexConfigured()
   const { isAuthenticated } = useConvexAuth()
   const { user } = useUser()
@@ -131,9 +142,29 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
   }
 
   return (
-    <aside className="w-full shrink-0 border-b border-hairline bg-sidebar/96 lg:sticky lg:top-0 lg:h-dvh lg:w-[280px] lg:border-r lg:border-b-0">
-      <div className="flex h-full flex-col px-4 py-4">
-        <div>
+    <aside className="h-full w-full shrink-0 border-r border-hairline bg-sidebar/96 shadow-[0_20px_50px_rgba(0,0,0,0.3)] lg:sticky lg:top-0 lg:h-dvh lg:w-[280px] lg:shadow-none">
+      <div className="flex h-full min-h-0 flex-col px-4 py-4">
+        {showMobileClose ? (
+          <div className="mb-4 flex items-center justify-between gap-3 border-b border-hairline pb-4 lg:hidden">
+            <div>
+              <p className="do-eyebrow">Workspace</p>
+              <p className="mt-1 text-[14px] font-medium text-parchment">
+                Campus navigation
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              onClick={onCloseMobileMenu}
+              aria-label="Close navigation"
+            >
+              <PanelLeftCloseIcon className="size-4" />
+            </Button>
+          </div>
+        ) : null}
+
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           <p className="px-1 text-[11px] font-semibold tracking-[0.08em] text-tan uppercase">
             Navigate
           </p>
@@ -145,6 +176,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
                 match={section.match}
                 icon={<section.icon className="size-4" />}
                 badge={sectionBadges[section.id] ?? null}
+                onNavigate={onCloseMobileMenu}
               >
                 {section.navLabel}
               </SidebarLink>
@@ -152,7 +184,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
           </nav>
         </div>
 
-        <div className="mt-auto pt-5">
+        <div className="pt-5">
           <div className="h-px bg-hairline" />
           <div className="mt-4 rounded-[10px] border border-hairline bg-elevated/92 p-3">
             <div className="flex items-center gap-3">

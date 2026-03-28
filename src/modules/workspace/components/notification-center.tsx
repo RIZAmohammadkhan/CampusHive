@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useMutation, useQuery } from "convex/react"
 import Link from "next/link"
 import {
@@ -68,6 +68,7 @@ export function NotificationCenter({
   workspaceSlug: string
 }) {
   const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement | null>(null)
   const notifications = useQuery(notificationsApi.list, { workspaceSlug })
   const markAllRead = useMutation(notificationsApi.markAllRead)
 
@@ -79,12 +80,32 @@ export function NotificationCenter({
     void markAllRead({ workspaceSlug })
   }, [open, notifications?.unreadCount, markAllRead, workspaceSlug])
 
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown)
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown)
+    }
+  }, [open])
+
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         className="relative flex h-10 w-10 items-center justify-center rounded-[8px] border border-hairline bg-elevated/92 text-tan transition-colors hover:border-white/10 hover:bg-[rgba(255,255,255,0.04)] hover:text-parchment"
+        aria-label="Toggle notifications"
+        aria-expanded={open}
       >
         <BellIcon className="size-4" />
         {notifications && notifications.unreadCount > 0 ? (
@@ -95,7 +116,7 @@ export function NotificationCenter({
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-30 mt-3 w-[360px] rounded-[10px] border border-hairline bg-elevated/96 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/8 before:content-['']">
+        <div className="absolute right-0 z-30 mt-3 w-[min(360px,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] rounded-[10px] border border-hairline bg-elevated/96 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/8 before:content-[''] sm:w-[360px] sm:max-w-none sm:p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="do-eyebrow">Notifications</p>
@@ -112,7 +133,7 @@ export function NotificationCenter({
             </button>
           </div>
 
-          <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto pr-1">
+          <div className="mt-4 max-h-[min(65dvh,420px)] space-y-2 overflow-y-auto sm:pr-1">
             {notifications?.items.length ? (
               notifications.items.map((item) => (
                 <Link
@@ -126,7 +147,7 @@ export function NotificationCenter({
                       {notificationIcon(item.kind)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="do-pill do-pill-platinum">
@@ -140,7 +161,7 @@ export function NotificationCenter({
                             {item.title}
                           </p>
                         </div>
-                        <span className="text-[10px] uppercase tracking-[0.08em] text-tan">
+                        <span className="shrink-0 text-[10px] uppercase tracking-[0.08em] text-tan">
                           {formatRelativeTime(item.createdAt)}
                         </span>
                       </div>
