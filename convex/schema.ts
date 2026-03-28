@@ -22,6 +22,7 @@ const taskStatus = v.union(
   v.literal("done"),
   v.literal("flagged")
 )
+const taskKind = v.union(v.literal("assigned"), v.literal("volunteer"))
 const eventStatus = v.union(v.literal("open"), v.literal("closed"))
 const pollStatus = v.union(v.literal("open"), v.literal("closed"))
 
@@ -141,6 +142,8 @@ export default defineSchema({
 
   tasks: defineTable({
     workspaceId: v.id("workspaces"),
+    eventId: v.optional(v.id("events")),
+    taskKind: v.optional(taskKind),
     title: v.string(),
     column: taskColumn,
     status: v.optional(taskStatus),
@@ -151,6 +154,9 @@ export default defineSchema({
     description: v.optional(v.string()),
     assigneeUserId: v.optional(v.id("users")),
     createdByUserId: v.optional(v.id("users")),
+    completedAt: v.optional(v.number()),
+    completedByUserId: v.optional(v.id("users")),
+    completionNote: v.optional(v.string()),
     updatedAt: v.optional(v.number()),
   }).index("by_workspace_and_column_order", ["workspaceId", "column", "order"]),
 

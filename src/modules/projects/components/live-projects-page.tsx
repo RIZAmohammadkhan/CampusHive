@@ -3,11 +3,14 @@
 import type { FormEvent } from "react"
 import { useState, useTransition } from "react"
 import {
+  CalendarDaysIcon,
+  CheckCircle2Icon,
   ChevronDownIcon,
   Clock3Icon,
   PlusIcon,
   SparklesIcon,
   TriangleAlertIcon,
+  UserPlusIcon,
   XIcon,
 } from "lucide-react"
 import { useMutation, useQuery } from "convex/react"
@@ -21,9 +24,11 @@ import { Input } from "@/components/ui/input"
 import { projectsApi } from "@/modules/projects/api"
 import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 
-const statIcons = [SparklesIcon, Clock3Icon, TriangleAlertIcon]
+const statIcons = [SparklesIcon, UserPlusIcon, TriangleAlertIcon]
 const selectClassName =
   "h-10 rounded-2xl border border-hairline bg-field/90 px-3 text-[13px] text-parchment outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/30"
+const textareaClassName =
+  "min-h-[112px] w-full rounded-[20px] border border-hairline bg-field/90 px-3 py-3 text-[13px] leading-6 text-parchment outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/30"
 const statusOptions = [
   { id: "acknowledged", label: "Acknowledged" },
   { id: "inProgress", label: "In progress" },
@@ -31,9 +36,38 @@ const statusOptions = [
   { id: "flagged", label: "Needs help" },
 ] as const
 
+function formatUpdated(timestamp: number | null) {
+  if (!timestamp) {
+    return "Not updated yet"
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp))
+}
+
+function assigneeInitials(name: string | null) {
+  const value = name?.trim() ?? ""
+
+  if (!value) {
+    return "?"
+  }
+
+  const words = value.split(/\s+/).filter(Boolean).slice(0, 2)
+  return words.map((word) => word.charAt(0).toUpperCase()).join("")
+}
+
 function TaskComposerModal({
   open,
   canManage,
+  eventId,
+  setEventId,
+  events,
+  taskKind,
+  setTaskKind,
   title,
   setTitle,
   description,
@@ -53,6 +87,15 @@ function TaskComposerModal({
 }: {
   open: boolean
   canManage: boolean
+  eventId: string
+  setEventId: (value: string) => void
+  events: Array<{
+    id: string
+    title: string
+    dateLabel: string
+  }>
+  taskKind: "assigned" | "volunteer"
+  setTaskKind: (value: "assigned" | "volunteer") => void
   title: string
   setTitle: (value: string) => void
   description: string
@@ -84,15 +127,16 @@ function TaskComposerModal({
       onClick={onClose}
     >
       <div
-        className="do-surface w-full max-w-2xl p-6 md:p-7"
+        className="do-surface w-full max-w-3xl p-6 md:p-7"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="do-eyebrow">New Task</p>
-            <h3 className="mt-2 do-subheading">Add work to Tasks</h3>
-            <p className="mt-3 max-w-xl text-[13px] leading-6 text-tan">
-              Create a task, set the current status, and assign an owner if one is already clear.
+            <h3 className="mt-2 do-subheading">Publish event work</h3>
+            <p className="mt-3 max-w-2xl text-[13px] leading-6 text-tan">
+              Attach each task to a campus event, then either assign it directly or
+              open it up as a volunteer call.
             </p>
           </div>
           <Button variant="outline" size="icon-sm" onClick={onClose}>
@@ -101,6 +145,30 @@ function TaskComposerModal({
         </div>
 
         <form onSubmit={onSubmit} className="mt-6 grid gap-3 md:grid-cols-2">
+          <select
+            value={eventId}
+            onChange={(event) => setEventId(event.target.value)}
+            className={selectClassName}
+            disabled={isPending}
+          >
+            <option value="">Choose an event</option>
+            {events.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.title} · {item.dateLabel}
+              </option>
+            ))}
+          </select>
+          <select
+            value={taskKind}
+            onChange={(event) =>
+              setTaskKind(event.target.value as "assigned" | "volunteer")
+            }
+            className={selectClassName}
+            disabled={isPending}
+          >
+            <option value="assigned">Assigned task</option>
+            <option value="volunteer">Volunteer task</option>
+          </select>
           <div className="md:col-span-2">
             <Input
               value={title}
@@ -111,10 +179,11 @@ function TaskComposerModal({
             />
           </div>
           <div className="md:col-span-2">
-            <Input
+            <textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder="What needs to happen?"
+              placeholder="What should people know before taking this on?"
+              className={textareaClassName}
               disabled={isPending}
             />
           </div>
@@ -122,7 +191,11 @@ function TaskComposerModal({
             value={status}
             onChange={(event) =>
               setStatus(
-                event.target.value as "acknowledged" | "inProgress" | "done" | "flagged"
+                event.target.value as
+                  | "acknowledged"
+                  | "inProgress"
+                  | "done"
+                  | "flagged"
               )
             }
             className={selectClassName}
@@ -150,30 +223,39 @@ function TaskComposerModal({
             placeholder="Due label or checkpoint"
             disabled={isPending}
           />
-          <select
-            value={assigneeUserId}
-            onChange={(event) => setAssigneeUserId(event.target.value)}
-            className={selectClassName}
-            disabled={isPending}
-          >
-            <option value="">Unassigned</option>
-            {members.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.name} ({member.role})
-              </option>
-            ))}
-          </select>
+          {taskKind === "assigned" ? (
+            <select
+              value={assigneeUserId}
+              onChange={(event) => setAssigneeUserId(event.target.value)}
+              className={selectClassName}
+              disabled={isPending}
+            >
+              <option value="">Assign later</option>
+              {members.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name} ({member.role})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="rounded-[20px] border border-dashed border-hairline bg-surface/55 px-4 py-3 text-[12px] leading-6 text-tan">
+              This task will appear as an open volunteer slot until someone claims it.
+            </div>
+          )}
           <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-3 pt-2">
             <p className="text-[12px] leading-6 text-tan">
-              Tasks support title, notes, status, priority, due label, and assignee.
+              Organizers can still reassign or update status later from the list.
             </p>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isPending || !title.trim()}>
+              <Button
+                type="submit"
+                disabled={isPending || !eventId || !title.trim()}
+              >
                 <PlusIcon className="size-4" />
-                {isPending ? "Creating..." : "Add task"}
+                {isPending ? "Publishing..." : "Add task"}
               </Button>
             </div>
           </div>
@@ -181,37 +263,6 @@ function TaskComposerModal({
       </div>
     </div>
   )
-}
-
-function statusPill(status: (typeof statusOptions)[number]["id"]) {
-  if (status === "acknowledged") return "Ready"
-  if (status === "inProgress") return "Live"
-  if (status === "done") return "Done"
-  return "Blocked"
-}
-
-function formatUpdated(timestamp: number | null) {
-  if (!timestamp) {
-    return "Not updated yet"
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(timestamp))
-}
-
-function assigneeInitials(name: string | null) {
-  const value = name?.trim() ?? ""
-
-  if (!value) {
-    return "?"
-  }
-
-  const words = value.split(/\s+/).filter(Boolean).slice(0, 2)
-  return words.map((word) => word.charAt(0).toUpperCase()).join("")
 }
 
 export function LiveProjectsPage({ workspaceSlug }: { workspaceSlug: string }) {
@@ -237,8 +288,15 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   const data = useQuery(projectsApi.board, { workspaceSlug })
   const createTask = useMutation(projectsApi.createTask)
   const assignTask = useMutation(projectsApi.assignTask)
+  const volunteerForTask = useMutation(projectsApi.volunteerForTask)
+  const completeTask = useMutation(projectsApi.completeTask)
   const updateTaskStatus = useMutation(projectsApi.updateTaskStatus)
   const [isComposerOpen, setIsComposerOpen] = useState(false)
+  const [listFilter, setListFilter] = useState<"all" | "open" | "mine" | "volunteer">(
+    "all"
+  )
+  const [eventId, setEventId] = useState("")
+  const [taskKind, setTaskKind] = useState<"assigned" | "volunteer">("assigned")
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [status, setStatus] = useState<
@@ -250,23 +308,59 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   const [isPending, startTransition] = useTransition()
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null)
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
+  const [completionMessages, setCompletionMessages] = useState<Record<string, string>>({})
 
   if (data === undefined || data === null) {
     return (
       <LiveLoadingState
         title="Loading tasks"
-        body="Syncing the board."
+        body="Syncing event work."
       />
     )
   }
 
+  const tasks = Array.isArray(data.tasks) ? data.tasks : []
+  const events = Array.isArray(data.events) ? data.events : []
+  const members = Array.isArray(data.members) ? data.members : []
+  const summary = Array.isArray(data.summary) ? data.summary : []
+  const hasTaskListData = Array.isArray(data.tasks)
+  const filteredTasks = tasks.filter((task) => {
+    if (listFilter === "open") {
+      return task.status !== "done"
+    }
+
+    if (listFilter === "mine") {
+      return data.currentUserId !== null && task.assigneeUserId === data.currentUserId
+    }
+
+    if (listFilter === "volunteer") {
+      return task.taskKind === "volunteer" && !task.assigneeUserId
+    }
+
+    return true
+  })
+  const openTaskCount = tasks.filter((task) => task.status !== "done").length
+  const myTaskCount = data.currentUserId
+    ? tasks.filter((task) => task.assigneeUserId === data.currentUserId).length
+    : 0
+  const volunteerOpenCount = tasks.filter(
+    (task) => task.taskKind === "volunteer" && !task.assigneeUserId
+  ).length
+
   const resetComposer = () => {
+    setEventId(events[0]?.id ?? "")
+    setTaskKind("assigned")
     setTitle("")
     setDescription("")
     setStatus("acknowledged")
     setPriority("Medium")
     setDueLabel("")
     setAssigneeUserId("")
+  }
+
+  const openComposer = () => {
+    resetComposer()
+    setIsComposerOpen(true)
   }
 
   const closeComposer = () => {
@@ -284,12 +378,14 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
       try {
         await createTask({
           workspaceSlug,
+          eventId,
+          taskKind,
           title,
           description: description || undefined,
           status,
           priority,
           dueLabel: dueLabel || undefined,
-          assigneeUserId: assigneeUserId || null,
+          assigneeUserId: taskKind === "assigned" ? assigneeUserId || null : null,
         })
 
         resetComposer()
@@ -348,14 +444,61 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
     })
   }
 
-  const flaggedCount =
-    data.columns.find((column) => column.id === "flagged")?.cards.length ?? 0
+  const handleVolunteer = (taskId: string) => {
+    setPendingTaskId(taskId)
+
+    startTransition(async () => {
+      try {
+        await volunteerForTask({
+          workspaceSlug,
+          taskId,
+        })
+        toast.success("You volunteered for this task")
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Could not volunteer for this task."
+        )
+      } finally {
+        setPendingTaskId(null)
+      }
+    })
+  }
+
+  const handleCompleteTask = (taskId: string) => {
+    setPendingTaskId(taskId)
+
+    startTransition(async () => {
+      try {
+        await completeTask({
+          workspaceSlug,
+          taskId,
+          message: completionMessages[taskId]?.trim() || undefined,
+        })
+        setCompletionMessages((current) => ({
+          ...current,
+          [taskId]: "",
+        }))
+        toast.success("Task marked as completed")
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to complete task."
+        )
+      } finally {
+        setPendingTaskId(null)
+      }
+    })
+  }
 
   return (
     <>
       <TaskComposerModal
         open={isComposerOpen}
         canManage={data.canManage}
+        eventId={eventId}
+        setEventId={setEventId}
+        events={events}
+        taskKind={taskKind}
+        setTaskKind={setTaskKind}
         title={title}
         setTitle={setTitle}
         description={description}
@@ -368,7 +511,7 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
         setDueLabel={setDueLabel}
         assigneeUserId={assigneeUserId}
         setAssigneeUserId={setAssigneeUserId}
-        members={data.members}
+        members={members}
         isPending={isPending}
         onClose={closeComposer}
         onSubmit={handleCreateTask}
@@ -376,38 +519,46 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
 
       <div className="space-y-6 lg:space-y-8">
         <section className="do-surface overflow-hidden p-6">
-          <div className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
+          <div className="grid gap-6 xl:grid-cols-[1.4fr_0.95fr]">
             <div>
               <p className="do-eyebrow">Tasks</p>
-              <h2 className="mt-2 do-subheading">Work in one board.</h2>
+              <h2 className="mt-2 do-subheading">Event work, in one clear list.</h2>
               <p className="mt-3 max-w-2xl text-[14px] leading-7 text-tan">
-                Track ownership, progress, and blockers for the work behind each event.
+                Every task now belongs to a campus event, so organizers can publish
+                assignments, ask for volunteers, and keep the event team aligned from
+                one place.
               </p>
 
               <div className="mt-5 flex flex-wrap gap-3">
                 <span className="do-pill">
-                  <SparklesIcon className="size-3.5" />
-                  {data.summary[0]?.value ?? "00"} open
+                  <CalendarDaysIcon className="size-3.5" />
+                  {events.length} events in filter
                 </span>
                 <span className="do-pill">
-                  <TriangleAlertIcon className="size-3.5" />
-                  {flaggedCount} blocked
+                  <SparklesIcon className="size-3.5" />
+                  {filteredTasks.length} tasks visible
                 </span>
               </div>
             </div>
 
             <div className="do-card p-5">
-              <p className="do-eyebrow">Task flow</p>
+              <p className="do-eyebrow">Organizer tools</p>
               <p className="mt-3 text-[20px] font-medium text-cream">
-                {data.canManage ? "Create and assign work" : "Track active work"}
+                {data.canManage ? "Publish assignments and volunteer asks" : "Track event work"}
               </p>
               <p className="mt-3 text-[13px] leading-6 text-tan">
                 {data.canManage
-                  ? "Add tasks, set status, and hand off ownership from one place."
-                  : "View progress and update task status as work moves forward."}
+                  ? events.length
+                    ? "Create work items tied to a specific event, then assign them or leave them open for volunteers."
+                    : "Create at least one campus event before publishing tasks."
+                  : "Browse the event task list and step up for open volunteer slots when they appear."}
               </p>
               {data.canManage ? (
-                <Button className="mt-5 w-full" onClick={() => setIsComposerOpen(true)}>
+                <Button
+                  className="mt-5 w-full"
+                  onClick={openComposer}
+                  disabled={!events.length}
+                >
                   <PlusIcon className="size-4" />
                   Add task
                 </Button>
@@ -417,7 +568,7 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
         </section>
 
         <section className="grid gap-4 md:grid-cols-3">
-          {data.summary.map((metric, index) => {
+          {summary.map((metric, index) => {
             const Icon = statIcons[index] ?? SparklesIcon
 
             return (
@@ -425,148 +576,258 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                 <Icon className="size-4 text-slate" />
                 <p className="mt-4 do-stat-label">{metric.label}</p>
                 <p className="mt-3 do-stat-value">{metric.value}</p>
+                <p className="mt-3 text-[12px] leading-6 text-tan">{metric.detail}</p>
               </div>
             )
           })}
         </section>
 
         <section className="space-y-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="do-eyebrow">Board</p>
-              <h3 className="mt-2 do-subheading">Current tasks</h3>
+              <p className="do-eyebrow">Filter</p>
+              <h3 className="mt-2 do-subheading">Task list</h3>
             </div>
-            {!data.canManage ? (
-              <span className="do-pill">Only campus admins can add tasks</span>
-            ) : null}
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={listFilter === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setListFilter("all")}
+                >
+                  All tasks
+                </Button>
+                <Button
+                  variant={listFilter === "open" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setListFilter("open")}
+                >
+                  Open tasks · {openTaskCount}
+                </Button>
+                <Button
+                  variant={listFilter === "mine" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setListFilter("mine")}
+                >
+                  My tasks · {myTaskCount}
+                </Button>
+                <Button
+                  variant={listFilter === "volunteer" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setListFilter("volunteer")}
+                >
+                  Volunteer asks · {volunteerOpenCount}
+                </Button>
+              </div>
+            </div>
           </div>
 
-          {data.columns.some((column) => column.cards.length > 0) ? (
-            <div className="flex gap-4 overflow-x-auto pb-2">
-              {data.columns.map((column) => (
-                <div
-                  key={column.id}
-                  className="do-panel min-w-[320px] max-w-[320px] shrink-0"
-                >
-                  <div className="border-b border-hairline px-5 py-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-[17px] font-medium text-cream">
-                          {column.name}
-                        </p>
-                        <p className="mt-1 text-[11px] tracking-[0.12em] text-tan uppercase">
-                          {column.cards.length} cards
-                        </p>
-                      </div>
-                      <span className="do-pill">{statusPill(column.id)}</span>
-                    </div>
-                  </div>
-                  <div className="space-y-3 p-4">
-                    {column.cards.map((card) => (
-                      <div key={card.id} className="do-card p-4">
-                        <button
-                          type="button"
-                          className="flex w-full items-start gap-3 text-left"
-                          onClick={() =>
-                            setExpandedTaskId((current) =>
-                              current === card.id ? null : card.id
-                            )
-                          }
-                        >
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[12px] font-medium text-cream">
-                            {assigneeInitials(card.assigneeName)}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-start justify-between gap-3">
-                              <span className="min-w-0">
-                                <span className="block truncate text-[15px] font-medium text-cream">
-                                  {card.title}
-                                </span>
-                                <span className="mt-1 block text-[12px] leading-6 text-tan">
-                                  {card.assigneeName
-                                    ? `Assigned to ${card.assigneeName}`
-                                    : "Unassigned"}
-                                </span>
-                              </span>
-                              <ChevronDownIcon
-                                className={`mt-1 size-4 shrink-0 text-tan transition-transform ${
-                                  expandedTaskId === card.id ? "rotate-180" : ""
-                                }`}
-                              />
-                            </span>
-                            <span className="mt-3 flex flex-wrap gap-2">
-                              <span className="do-pill">{card.priority}</span>
-                              <span className="do-pill">{statusPill(card.status)}</span>
-                            </span>
-                          </span>
-                        </button>
+          {!hasTaskListData ? (
+            <div className="do-panel p-6 text-[13px] text-tan">
+              This page is waiting for the latest Convex backend shape. Run `npm run convex:dev`
+              and refresh.
+            </div>
+          ) : filteredTasks.length ? (
+            <div className="space-y-4">
+              {filteredTasks.map((task) => {
+                const canEditStatus =
+                  data.canManage ||
+                  (data.currentUserId !== null &&
+                    task.assigneeUserId === data.currentUserId)
+                const canMarkComplete =
+                  data.currentUserId !== null &&
+                  task.assigneeUserId === data.currentUserId &&
+                  task.status !== "done"
 
-                        {expandedTaskId === card.id ? (
-                          <div className="mt-4 border-t border-hairline/80 pt-4">
-                            {card.description ? (
-                              <p className="text-[12px] leading-6 text-tan">
-                                {card.description}
+                return (
+                  <div key={task.id} className="do-panel p-5">
+                    <button
+                      type="button"
+                      className="flex w-full items-start gap-4 text-left"
+                      onClick={() =>
+                        setExpandedTaskId((current) => (current === task.id ? null : task.id))
+                      }
+                    >
+                      <span className="flex size-11 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[12px] font-medium text-cream">
+                        {assigneeInitials(task.assigneeName)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-start justify-between gap-3">
+                          <span className="min-w-0">
+                            <span className="block text-[12px] tracking-[0.14em] text-tan uppercase">
+                              {task.eventTitle}
+                            </span>
+                            <span className="mt-2 block truncate text-[18px] font-medium text-cream">
+                              {task.title}
+                            </span>
+                            <span className="mt-2 block text-[12px] leading-6 text-tan">
+                              {task.taskKind === "volunteer"
+                                ? task.assigneeName
+                                  ? `Volunteer: ${task.assigneeName}`
+                                  : "Open for volunteers"
+                                : task.assigneeName
+                                  ? `Assigned to ${task.assigneeName}`
+                                  : "No owner yet"}
+                            </span>
+                          </span>
+                          <ChevronDownIcon
+                            className={`mt-1 size-4 shrink-0 text-tan transition-transform ${
+                              expandedTaskId === task.id ? "rotate-180" : ""
+                            }`}
+                          />
+                        </span>
+                        <span className="mt-4 flex flex-wrap gap-2">
+                          <span className="do-pill">{task.eventDateLabel}</span>
+                          <span className="do-pill">{task.priority}</span>
+                          <span className="do-pill">{task.statusLabel}</span>
+                          <span className="do-pill">
+                            {task.taskKind === "volunteer" ? "Volunteer" : "Assigned"}
+                          </span>
+                        </span>
+                      </span>
+                    </button>
+
+                    {expandedTaskId === task.id ? (
+                      <div className="mt-5 border-t border-hairline/80 pt-4">
+                        <p className="text-[13px] leading-6 text-tan">
+                          {task.description || "No extra notes yet."}
+                        </p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <span className="do-pill">{task.dueLabel}</span>
+                          <span className="do-pill">
+                            <Clock3Icon className="size-3.5" />
+                            Updated {formatUpdated(task.updatedAt)}
+                          </span>
+                          {task.completedAt ? (
+                            <span className="do-pill">
+                              <CheckCircle2Icon className="size-3.5" />
+                              Completed {formatUpdated(task.completedAt)}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {task.completedAt ? (
+                          <div className="mt-4 rounded-[20px] border border-hairline bg-surface/55 p-4">
+                            <p className="do-eyebrow">Completion</p>
+                            <p className="mt-2 text-[13px] leading-6 text-tan">
+                              {task.completedByName
+                                ? `${task.completedByName} marked this completed.`
+                                : "This task was marked as completed."}
+                            </p>
+                            {task.completionNote ? (
+                              <p className="mt-3 text-[13px] leading-6 text-cream">
+                                {task.completionNote}
                               </p>
                             ) : (
-                              <p className="text-[12px] leading-6 text-tan">
-                                No extra notes.
+                              <p className="mt-3 text-[12px] leading-6 text-tan">
+                                No completion note was added.
                               </p>
                             )}
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <span className="do-pill">{card.dueLabel}</span>
-                              <span className="do-pill">Updated {formatUpdated(card.updatedAt)}</span>
-                            </div>
-                            <div className="mt-4 space-y-3">
-                              <select
-                                value={card.status}
-                                onChange={(event) =>
-                                  handleUpdateStatus(
-                                    card.id,
-                                    event.target.value as
-                                      | "acknowledged"
-                                      | "inProgress"
-                                      | "done"
-                                      | "flagged"
-                                  )
-                                }
-                                className={`${selectClassName} w-full`}
-                                disabled={isPending && pendingTaskId === card.id}
-                              >
-                                {statusOptions.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                              {data.canManage ? (
-                                <select
-                                  value={card.assigneeUserId ?? ""}
-                                  onChange={(event) =>
-                                    handleAssignTask(card.id, event.target.value)
-                                  }
-                                  className={`${selectClassName} w-full`}
-                                  disabled={isPending && pendingTaskId === card.id}
-                                >
-                                  <option value="">Unassigned</option>
-                                  {data.members.map((member) => (
-                                    <option key={member.id} value={member.id}>
-                                      {member.name} ({member.role})
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : null}
-                            </div>
                           </div>
                         ) : null}
+
+                        <div className="mt-4 space-y-3">
+                          {canEditStatus ? (
+                            <select
+                              value={task.status}
+                              onChange={(event) =>
+                                handleUpdateStatus(
+                                  task.id,
+                                  event.target.value as
+                                    | "acknowledged"
+                                    | "inProgress"
+                                    | "done"
+                                    | "flagged"
+                                )
+                              }
+                              className={`${selectClassName} w-full`}
+                              disabled={isPending && pendingTaskId === task.id}
+                            >
+                              {statusOptions.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+
+                          {data.canManage ? (
+                            <select
+                              value={task.assigneeUserId ?? ""}
+                              onChange={(event) =>
+                                handleAssignTask(task.id, event.target.value)
+                              }
+                              className={`${selectClassName} w-full`}
+                              disabled={isPending && pendingTaskId === task.id}
+                            >
+                              <option value="">
+                                {task.taskKind === "volunteer"
+                                  ? "Leave open for volunteers"
+                                  : "Unassigned"}
+                              </option>
+                              {members.map((member) => (
+                                <option key={member.id} value={member.id}>
+                                  {member.name} ({member.role})
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+
+                          {task.canVolunteer ? (
+                            <Button
+                              onClick={() => handleVolunteer(task.id)}
+                              disabled={isPending && pendingTaskId === task.id}
+                            >
+                              <UserPlusIcon className="size-4" />
+                              Volunteer for this task
+                            </Button>
+                          ) : task.isCurrentUserVolunteer ? (
+                            <span className="do-pill">You volunteered for this</span>
+                          ) : null}
+
+                          {canMarkComplete ? (
+                            <div className="rounded-[20px] border border-hairline bg-surface/55 p-4">
+                              <p className="do-eyebrow">Mark complete</p>
+                              <p className="mt-2 text-[12px] leading-6 text-tan">
+                                Add an optional note so everyone can see what was finished.
+                              </p>
+                              <textarea
+                                value={completionMessages[task.id] ?? ""}
+                                onChange={(event) =>
+                                  setCompletionMessages((current) => ({
+                                    ...current,
+                                    [task.id]: event.target.value,
+                                  }))
+                                }
+                                placeholder="Optional completion note"
+                                className={`${textareaClassName} mt-3 min-h-[96px]`}
+                                disabled={isPending && pendingTaskId === task.id}
+                              />
+                              <div className="mt-3 flex justify-end">
+                                <Button
+                                  onClick={() => handleCompleteTask(task.id)}
+                                  disabled={isPending && pendingTaskId === task.id}
+                                >
+                                  <CheckCircle2Icon className="size-4" />
+                                  Mark completed
+                                </Button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                    ))}
+                    ) : null}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <div className="do-panel p-6 text-[13px] text-tan">
-              No tasks yet.
+              {listFilter === "mine"
+                ? "No tasks are currently assigned to you."
+                : listFilter === "volunteer"
+                  ? "No open volunteer tasks right now."
+                  : "No event tasks yet."}
             </div>
           )}
         </section>
