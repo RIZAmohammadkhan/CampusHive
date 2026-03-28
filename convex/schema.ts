@@ -1,0 +1,131 @@
+import { defineSchema, defineTable } from "convex/server"
+import { v } from "convex/values"
+
+const workspaceRole = v.union(v.literal("admin"), v.literal("member"))
+const conversationKind = v.union(v.literal("channel"), v.literal("dm"))
+const taskColumn = v.union(v.literal("now"), v.literal("next"), v.literal("later"))
+const taskPriority = v.union(v.literal("High"), v.literal("Medium"), v.literal("Low"))
+const taskStatus = v.union(
+  v.literal("acknowledged"),
+  v.literal("inProgress"),
+  v.literal("done"),
+  v.literal("flagged")
+)
+
+export default defineSchema({
+  users: defineTable({
+    externalId: v.string(),
+    name: v.string(),
+    email: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    tokenIdentifier: v.optional(v.string()),
+    isSeed: v.boolean(),
+  }).index("by_external_id", ["externalId"]),
+
+  workspaces: defineTable({
+    clerkOrgId: v.string(),
+    slug: v.string(),
+    name: v.string(),
+    createdAt: v.optional(v.number()),
+  })
+    .index("by_clerk_org_id", ["clerkOrgId"])
+    .index("by_slug", ["slug"]),
+
+  workspaceMembers: defineTable({
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    role: workspaceRole,
+    joinedAt: v.number(),
+    lastActiveAt: v.number(),
+  })
+    .index("by_workspace_and_user", ["workspaceId", "userId"])
+    .index("by_workspace_and_role", ["workspaceId", "role"])
+    .index("by_user_and_workspace", ["userId", "workspaceId"]),
+
+  conversations: defineTable({
+    workspaceId: v.id("workspaces"),
+    slug: v.string(),
+    name: v.string(),
+    description: v.string(),
+    kind: conversationKind,
+    createdByUserId: v.optional(v.id("users")),
+    createdAt: v.optional(v.number()),
+  }).index("by_workspace_and_slug", ["workspaceId", "slug"]),
+
+  messages: defineTable({
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    authorId: v.id("users"),
+    body: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_conversation_and_created_at", ["conversationId", "createdAt"])
+    .index("by_workspace_and_created_at", ["workspaceId", "createdAt"]),
+
+  presence: defineTable({
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    route: v.string(),
+    room: v.string(),
+    lastSeenAt: v.number(),
+  })
+    .index("by_workspace_and_user", ["workspaceId", "userId"])
+    .index("by_workspace_and_last_seen_at", ["workspaceId", "lastSeenAt"]),
+
+  rooms: defineTable({
+    workspaceId: v.id("workspaces"),
+    slug: v.string(),
+    name: v.string(),
+    mode: v.string(),
+    note: v.string(),
+    order: v.number(),
+    active: v.boolean(),
+  })
+    .index("by_workspace_and_slug", ["workspaceId", "slug"])
+    .index("by_workspace_and_order", ["workspaceId", "order"]),
+
+  documents: defineTable({
+    workspaceId: v.id("workspaces"),
+    slug: v.string(),
+    title: v.string(),
+    summary: v.string(),
+    tag: v.string(),
+    updatedAt: v.number(),
+    ownerName: v.string(),
+  }).index("by_workspace_and_updated_at", ["workspaceId", "updatedAt"]),
+
+  tasks: defineTable({
+    workspaceId: v.id("workspaces"),
+    title: v.string(),
+    column: taskColumn,
+    status: v.optional(taskStatus),
+    ownerName: v.string(),
+    dueLabel: v.string(),
+    priority: taskPriority,
+    order: v.number(),
+    description: v.optional(v.string()),
+    assigneeUserId: v.optional(v.id("users")),
+    createdByUserId: v.optional(v.id("users")),
+    updatedAt: v.optional(v.number()),
+  }).index("by_workspace_and_column_order", ["workspaceId", "column", "order"]),
+
+  events: defineTable({
+    workspaceId: v.id("workspaces"),
+    dayKey: v.string(),
+    dayName: v.string(),
+    dateLabel: v.string(),
+    time: v.string(),
+    title: v.string(),
+    type: v.string(),
+    location: v.string(),
+    order: v.number(),
+  }).index("by_workspace_and_day_order", ["workspaceId", "dayKey", "order"]),
+
+  whiteboardSessions: defineTable({
+    workspaceId: v.id("workspaces"),
+    title: v.string(),
+    collaborators: v.number(),
+    note: v.string(),
+    order: v.number(),
+  }).index("by_workspace_and_order", ["workspaceId", "order"]),
+})
