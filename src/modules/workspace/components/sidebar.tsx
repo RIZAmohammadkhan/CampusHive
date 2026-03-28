@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { useOrganization } from "@clerk/nextjs"
+import { useOrganization, useUser } from "@clerk/nextjs"
 import { useConvexAuth, useQuery } from "convex/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -89,17 +89,42 @@ function sidebarChannelMeta(
   return "join"
 }
 
+function normalizeOptionalString(value: string | null | undefined) {
+  const normalized = value?.trim()
+  return normalized ? normalized : undefined
+}
+
 export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
   const enabled = useConvexConfigured()
   const { isAuthenticated } = useConvexAuth()
   const { organization } = useOrganization()
+  const { user } = useUser()
   const queryArgs = enabled && isAuthenticated ? { workspaceSlug } : "skip"
   const channelsData = useQuery(channelsApi.listChannels, queryArgs)
   const directoryData = useQuery(workspaceApi.directory, queryArgs)
   const workspaceName = organization?.name ?? workspaceSlug
   const workspaceInitial = workspaceName.charAt(0).toUpperCase()
+  const clerkDisplayName =
+    normalizeOptionalString(user?.fullName) ??
+    normalizeOptionalString(user?.firstName) ??
+    normalizeOptionalString(user?.username)
+  const currentMember = directoryData?.members.find((member) => member.isCurrentUser)
+  const currentUserName =
+    normalizeOptionalString(currentMember?.name) &&
+    currentMember?.name !== "Student member"
+      ? currentMember.name
+      : clerkDisplayName ?? "You"
   const roleLabel =
     directoryData?.currentRole === "admin" ? "College admin" : "Student member"
+  const visibleMembers =
+    directoryData?.members.slice(0, 6).map((member) => ({
+      ...member,
+      displayName:
+        member.isCurrentUser &&
+        (!normalizeOptionalString(member.name) || member.name === "Student member")
+          ? clerkDisplayName ?? member.name
+          : member.name,
+    })) ?? []
 
   return (
     <aside className="w-full shrink-0 border-b border-hairline/80 bg-panel/55 backdrop-blur-xl lg:w-[280px] lg:border-r lg:border-b-0">
@@ -113,6 +138,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
               <div className="truncate text-[16px] font-medium leading-none text-cream">
                 {workspaceName}
               </div>
+              <div className="truncate text-[13px] text-tan">{currentUserName}</div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="do-pill">{roleLabel}</span>
               </div>
@@ -172,17 +198,17 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
             </div>
             <div className="mt-3 space-y-2">
               {directoryData?.members.length ? (
-                directoryData.members.slice(0, 6).map((member) => (
+                visibleMembers.map((member) => (
                   <div
                     key={member.id}
                     className="flex items-center gap-3 rounded-2xl border border-hairline bg-surface/55 px-3 py-3"
                   >
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[12px] text-cream">
-                      {member.name.charAt(0)}
+                      {member.displayName.charAt(0)}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-medium text-cream">
-                        {member.name}
+                        {member.displayName}
                       </span>
                       <span className="block text-[11px] leading-6 text-tan">
                         {member.role === "admin" ? "College admin" : "Student member"}
