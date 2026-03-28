@@ -3,28 +3,31 @@
 import type { ReactNode } from "react"
 import { useConvexAuth } from "convex/react"
 
-import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
-import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
+function QuietGateState() {
+  return (
+    <div
+      className="do-surface p-6 md:p-8 lg:p-10"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label="Loading workspace"
+    >
+      <div className="grid gap-3 md:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div
+            key={index}
+            className="do-card h-28 animate-pulse bg-elevated/55 p-4"
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function ConvexAuthGate({ children }: { children: ReactNode }) {
   const { isLoading, isAuthenticated } = useConvexAuth()
 
-  if (isLoading) {
-    return (
-      <LiveLoadingState
-        title="Connecting your Convex session"
-        body="Waiting for Clerk to hand Convex an authenticated campus token."
-      />
-    )
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <ConvexSetupNotice
-        title="Convex is not receiving a Clerk auth token yet."
-        body="Make sure you are signed in, the Clerk Convex integration or a JWT template named `convex` is configured, and then refresh the page."
-      />
-    )
+  if (isLoading || !isAuthenticated) {
+    return <QuietGateState />
   }
 
   return <>{children}</>

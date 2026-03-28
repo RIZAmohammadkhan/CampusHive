@@ -28,6 +28,29 @@ function normalizeWorkspaceRole(value: string | undefined): WorkspaceRole {
   return "member"
 }
 
+function normalizeOptionalString(value: string | undefined | null) {
+  const normalized = value?.trim()
+  return normalized ? normalized : undefined
+}
+
+function debugNameState(label: string, value: {
+  externalId?: string
+  profileName?: string
+  profileFirstName?: string
+  profileLastName?: string
+  identityName?: string
+  identityGivenName?: string
+  identityFamilyName?: string
+  existingName?: string
+  existingFirstName?: string
+  existingLastName?: string
+  savedName?: string
+  savedFirstName?: string
+  savedLastName?: string
+}) {
+  console.log(`[auth-debug] ${label}`, value)
+}
+
 export async function requireIdentity(ctx: ReadCtx): Promise<UserIdentity> {
   const identity = await ctx.auth.getUserIdentity()
 
@@ -131,16 +154,33 @@ export async function upsertUser(
   }
 ): Promise<Doc<"users">> {
   const existing = await getUserByExternalId(ctx, externalId)
+  const existingName = normalizeOptionalString(existing?.name)
+  const existingFirstName = normalizeOptionalString(existing?.firstName)
+  const existingLastName = normalizeOptionalString(existing?.lastName)
+  const existingEmail = normalizeOptionalString(existing?.email)
+  const existingImageUrl = normalizeOptionalString(existing?.imageUrl)
+  const existingTokenIdentifier = normalizeOptionalString(existing?.tokenIdentifier)
   const patch: Insert<"users"> = {
     externalId,
-    name,
-    firstName,
-    lastName,
-    email,
-    imageUrl,
-    tokenIdentifier,
+    name: normalizeOptionalString(name) ?? existingName ?? "Student member",
+    firstName: normalizeOptionalString(firstName) ?? existingFirstName,
+    lastName: normalizeOptionalString(lastName) ?? existingLastName,
+    email: normalizeOptionalString(email) ?? existingEmail,
+    imageUrl: normalizeOptionalString(imageUrl) ?? existingImageUrl,
+    tokenIdentifier:
+      normalizeOptionalString(tokenIdentifier) ?? existingTokenIdentifier,
     isSeed,
   }
+
+  debugNameState("upsertUser", {
+    externalId,
+    existingName,
+    existingFirstName,
+    existingLastName,
+    savedName: patch.name,
+    savedFirstName: patch.firstName,
+    savedLastName: patch.lastName,
+  })
 
   if (existing) {
     await ctx.db.patch(existing._id, patch)
@@ -172,16 +212,40 @@ export async function getOrCreateCurrentUser(
   }
 ): Promise<Doc<"users">> {
   const identity = await requireIdentity(ctx)
+  const existing = await getUserByExternalId(ctx, identity.subject)
+  const tokenGivenName = normalizeOptionalString(identity.givenName)
+  const tokenFamilyName = normalizeOptionalString(identity.familyName)
+  const tokenNameFallback =
+    normalizeOptionalString(identity.name) ??
+    (tokenGivenName || tokenFamilyName
+      ? [tokenGivenName, tokenFamilyName].filter(Boolean).join(" ")
+      : undefined)
+
+  debugNameState("getOrCreateCurrentUser input", {
+    externalId: identity.subject,
+    profileName: normalizeOptionalString(profile?.name),
+    profileFirstName: normalizeOptionalString(profile?.firstName),
+    profileLastName: normalizeOptionalString(profile?.lastName),
+    identityName: normalizeOptionalString(identity.name),
+    identityGivenName: tokenGivenName,
+    identityFamilyName: tokenFamilyName,
+    existingName: normalizeOptionalString(existing?.name),
+    existingFirstName: normalizeOptionalString(existing?.firstName),
+    existingLastName: normalizeOptionalString(existing?.lastName),
+  })
 
   return await upsertUser(ctx, {
     externalId: identity.subject,
-    name: profile?.name ?? identity.name ?? "Student member",
-    firstName: profile?.firstName,
-    lastName: profile?.lastName,
+    name: normalizeOptionalString(profile?.name) ?? tokenNameFallback ?? "Student member",
+    firstName: normalizeOptionalString(profile?.firstName) ?? tokenGivenName,
+    lastName: normalizeOptionalString(profile?.lastName) ?? tokenFamilyName,
     email:
-      profile?.email ??
-      (typeof identity.email === "string" ? identity.email : undefined),
-    imageUrl: profile?.imageUrl ?? identity.pictureUrl,
+      normalizeOptionalString(profile?.email) ??
+      normalizeOptionalString(typeof identity.email === "string" ? identity.email : undefined),
+    imageUrl:
+      normalizeOptionalString(profile?.imageUrl) ??
+      normalizeOptionalString(identity.pictureUrl) ??
+      normalizeOptionalString(identity.profileUrl),
     tokenIdentifier: identity.tokenIdentifier,
     isSeed: false,
   })

@@ -13,6 +13,28 @@ import {
   getWorkspaceScopedPath,
 } from "@/modules/workspace/sections"
 
+function normalizeOptionalString(value: string | null | undefined) {
+  const normalized = value?.trim()
+  return normalized ? normalized : undefined
+}
+
+function debugNamePayload(user: ReturnType<typeof useUser>["user"]) {
+  return {
+    id: user?.id,
+    fullName: user?.fullName,
+    firstName: user?.firstName,
+    lastName: user?.lastName,
+    username: user?.username,
+    normalized: {
+      userName:
+        normalizeOptionalString(user?.fullName) ??
+        normalizeOptionalString(user?.username),
+      userFirstName: normalizeOptionalString(user?.firstName),
+      userLastName: normalizeOptionalString(user?.lastName),
+    },
+  }
+}
+
 function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
   const pathname = usePathname() ?? `/w/${workspaceSlug}`
   const { organization } = useOrganization()
@@ -27,16 +49,37 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
       return
     }
 
-    await bootstrapWorkspace({
+    const payload = {
       clerkOrgId: organization.id,
       slug: organization.slug ?? workspaceSlug,
       name: organization.name,
-      userName: user.fullName ?? user.username ?? undefined,
-      userFirstName: user.firstName ?? undefined,
-      userLastName: user.lastName ?? undefined,
-      userEmail: user.primaryEmailAddress?.emailAddress,
-      userImageUrl: user.imageUrl,
+      userName:
+        normalizeOptionalString(user.fullName) ??
+        normalizeOptionalString(user.username),
+      userFirstName: normalizeOptionalString(user.firstName),
+      userLastName: normalizeOptionalString(user.lastName),
+      userEmail: normalizeOptionalString(user.primaryEmailAddress?.emailAddress),
+      userImageUrl: normalizeOptionalString(user.imageUrl),
+    }
+
+    console.groupCollapsed("[auth-debug] Clerk -> Convex bootstrap")
+    console.log("workspaceSlug", workspaceSlug)
+    console.log("organization", {
+      id: organization.id,
+      slug: organization.slug,
+      name: organization.name,
     })
+    console.log("clerkUser", debugNamePayload(user))
+    console.log("bootstrapPayload", payload)
+    console.groupEnd()
+
+    try {
+      const result = await bootstrapWorkspace(payload)
+      console.log("[auth-debug] bootstrap result", result)
+    } catch (error) {
+      console.error("[auth-debug] bootstrap failed", error)
+      throw error
+    }
   })
 
   const runHeartbeat = useEffectEvent(async () => {
