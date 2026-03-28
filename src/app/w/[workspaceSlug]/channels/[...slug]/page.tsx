@@ -10,9 +10,10 @@ export default async function ChannelPage({
 }) {
   const { workspaceSlug, slug } = await params
   const [clubSlug, sectionSlug] = slug
+  const joinedSlug = slug.join("/")
 
-  if (clubSlug.startsWith("dm-")) {
-    redirect(workspaceMessagePath(workspaceSlug, clubSlug))
+  if (joinedSlug.startsWith("dm-") || joinedSlug.startsWith("dm/")) {
+    redirect(workspaceMessagePath(workspaceSlug, joinedSlug))
   }
 
   return (

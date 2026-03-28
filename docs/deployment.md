@@ -300,7 +300,10 @@ After the app is live, review these items:
 
 - Add the final production domain everywhere Clerk expects it.
 - If you use social auth, switch every provider to production credentials.
-- Consider explicitly configuring Clerk `authorizedParties` for your production origin allowlist.
+- Consider explicitly configuring Clerk `authorizedParties` for your production origin allowlist.npm run lint
+npm run build
+npx convex deploy
+npx convex env list --prod
 - Keep Clerk and Convex secrets identical across the systems only where they are meant to match.
 
 ## 12. Useful commands

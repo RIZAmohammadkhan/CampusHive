@@ -1492,6 +1492,16 @@ export const conversation = queryGeneric({
         .collect()
 
       for (const message of allMessages) {
+        if (convo.kind === "dm") {
+          const current = sectionStats.get(directMessageDiscussionSection.slug)
+
+          sectionStats.set(directMessageDiscussionSection.slug, {
+            messageCount: (current?.messageCount ?? 0) + 1,
+            lastMessageAt: Math.max(current?.lastMessageAt ?? 0, message.createdAt),
+          })
+          continue
+        }
+
         const fallbackSectionSlug = message.sectionId
           ? null
           : fallbackSectionSlugForConversation(convo)
@@ -1628,24 +1638,28 @@ export const listMessages = queryGeneric({
         q.eq("conversationId", convo._id)
       )
       .collect()
-    const discussionSections = await listDiscussionSectionSnapshots(ctx, convo)
-    const selectedSection = selectDiscussionSection(discussionSections, args.sectionSlug)
-    const fallbackSectionSlug = fallbackSectionSlugForConversation(convo)
+    let scopedMessages = messages
 
-    if (!selectedSection) {
-      return []
+    if (convo.kind !== "dm") {
+      const discussionSections = await listDiscussionSectionSnapshots(ctx, convo)
+      const selectedSection = selectDiscussionSection(discussionSections, args.sectionSlug)
+      const fallbackSectionSlug = fallbackSectionSlugForConversation(convo)
+
+      if (!selectedSection) {
+        return []
+      }
+
+      scopedMessages = messages.filter((message) => {
+        if (!message.sectionId) {
+          return selectedSection.slug === fallbackSectionSlug
+        }
+
+        return String(message.sectionId) === selectedSection.id
+      })
     }
 
     return await Promise.all(
-      messages
-        .filter((message) => {
-          if (!message.sectionId) {
-            return selectedSection.slug === fallbackSectionSlug
-          }
-
-          return String(message.sectionId) === selectedSection.id
-        })
-        .map(async (message) => {
+      scopedMessages.map(async (message) => {
         const author = await ctx.db.get(message.authorId)
 
         return {
