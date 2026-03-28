@@ -451,6 +451,18 @@ function selectDiscussionSection(
   )
 }
 
+function fallbackSectionSlugForConversation(conversation: Doc<"conversations">) {
+  if (conversation.kind === "dm") {
+    return directMessageDiscussionSection.slug
+  }
+
+  if (conversation.slug === "general") {
+    return campusFeedDiscussionSection.slug
+  }
+
+  return "general"
+}
+
 function getDiscussionSectionReplyAccess(section: {
   replyAccessMode?: SectionReplyAccessMode
   allowedReplyUserIds?: Array<Id<"users"> | string>
@@ -1482,9 +1494,7 @@ export const conversation = queryGeneric({
       for (const message of allMessages) {
         const fallbackSectionSlug = message.sectionId
           ? null
-          : convo.slug === "general"
-            ? campusFeedDiscussionSection.slug
-            : "general"
+          : fallbackSectionSlugForConversation(convo)
         const matchedSection = message.sectionId
           ? discussionSections.find((section) => section.id === String(message.sectionId))
           : discussionSections.find((section) => section.slug === fallbackSectionSlug)
@@ -1620,6 +1630,7 @@ export const listMessages = queryGeneric({
       .collect()
     const discussionSections = await listDiscussionSectionSnapshots(ctx, convo)
     const selectedSection = selectDiscussionSection(discussionSections, args.sectionSlug)
+    const fallbackSectionSlug = fallbackSectionSlugForConversation(convo)
 
     if (!selectedSection) {
       return []
@@ -1629,7 +1640,7 @@ export const listMessages = queryGeneric({
       messages
         .filter((message) => {
           if (!message.sectionId) {
-            return selectedSection.slug === "general" || selectedSection.slug === "feed"
+            return selectedSection.slug === fallbackSectionSlug
           }
 
           return String(message.sectionId) === selectedSection.id

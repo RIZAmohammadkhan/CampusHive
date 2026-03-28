@@ -70,12 +70,22 @@ export function NotificationCenter({
   workspaceSlug: string
 }) {
   const [open, setOpen] = useState(false)
+  const [panelOffsetX, setPanelOffsetX] = useState(0)
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const enabled = useConvexConfigured()
   const { isAuthenticated } = useConvexAuth()
   const queryArgs = enabled && isAuthenticated ? { workspaceSlug } : "skip"
   const notifications = useQuery(notificationsApi.list, queryArgs)
   const markAllRead = useMutation(notificationsApi.markAllRead)
+  const closePanel = () => {
+    setPanelOffsetX(0)
+    setOpen(false)
+  }
+  const togglePanel = () => {
+    setPanelOffsetX(0)
+    setOpen((value) => !value)
+  }
 
   useEffect(() => {
     if (!enabled || !isAuthenticated || !open || !notifications?.unreadCount) {
@@ -99,7 +109,7 @@ export function NotificationCenter({
 
     const handlePointerDown = (event: PointerEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false)
+        closePanel()
       }
     }
 
@@ -110,11 +120,43 @@ export function NotificationCenter({
     }
   }, [open])
 
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const updatePanelOffset = () => {
+      const container = containerRef.current
+      const panel = panelRef.current
+
+      if (!container || !panel) {
+        return
+      }
+
+      const gutter = 12
+      const panelWidth = panel.getBoundingClientRect().width
+      const triggerRight = container.getBoundingClientRect().right
+      const idealLeft = triggerRight - panelWidth
+      const maxLeft = Math.max(gutter, window.innerWidth - gutter - panelWidth)
+      const clampedLeft = Math.min(Math.max(gutter, idealLeft), maxLeft)
+
+      setPanelOffsetX(clampedLeft - idealLeft)
+    }
+
+    const frameId = window.requestAnimationFrame(updatePanelOffset)
+    window.addEventListener("resize", updatePanelOffset)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.removeEventListener("resize", updatePanelOffset)
+    }
+  }, [open])
+
   return (
     <div ref={containerRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
+        onClick={togglePanel}
         className="relative flex h-10 w-10 items-center justify-center rounded-[8px] border border-hairline bg-elevated/92 text-tan transition-colors hover:border-white/10 hover:bg-[rgba(255,255,255,0.04)] hover:text-parchment"
         aria-label="Toggle notifications"
         aria-expanded={open}
@@ -128,7 +170,15 @@ export function NotificationCenter({
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-30 mt-3 w-[min(360px,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] rounded-[10px] border border-hairline bg-elevated/96 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/8 before:content-[''] sm:w-[360px] sm:max-w-none sm:p-4">
+        <div
+          ref={panelRef}
+          className="absolute right-0 z-30 mt-3 w-[min(360px,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] rounded-[10px] border border-hairline bg-elevated/96 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/8 before:content-[''] sm:w-[360px] sm:max-w-none sm:p-4"
+          style={
+            panelOffsetX === 0
+              ? undefined
+              : { transform: `translateX(${panelOffsetX}px)` }
+          }
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="do-eyebrow">Notifications</p>
@@ -138,7 +188,7 @@ export function NotificationCenter({
             </div>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={closePanel}
               className="text-[11px] font-medium uppercase tracking-[0.08em] text-tan transition-colors hover:text-parchment"
             >
               Close
@@ -151,7 +201,7 @@ export function NotificationCenter({
                 <Link
                   key={item.id}
                   href={workspacePath(workspaceSlug, item.route)}
-                  onClick={() => setOpen(false)}
+                  onClick={closePanel}
                   className="block rounded-[10px] border border-hairline bg-surface/78 px-4 py-3 transition-all hover:-translate-y-px hover:border-white/10 hover:bg-elevated"
                 >
                   <div className="flex items-start gap-3">
