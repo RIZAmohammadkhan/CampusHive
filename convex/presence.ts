@@ -28,7 +28,7 @@ export async function getActivePresenceEntries(
 function labelForRoute(route: string) {
   if (route === "/") return "Hub"
   if (route.startsWith("/channels")) return "Club spaces"
-  if (route.startsWith("/projects")) return "Event ops"
+  if (route.startsWith("/projects")) return "Tasks"
   if (route.startsWith("/calendar")) return "Events"
   return "Campus space"
 }

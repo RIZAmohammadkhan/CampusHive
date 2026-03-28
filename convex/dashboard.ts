@@ -89,9 +89,9 @@ export const office = queryGeneric({
             ? presence.route === "/"
               ? "Hub"
               : presence.route.startsWith("/channels")
-                ? "Club spaces"
-                : presence.route.startsWith("/projects")
-                  ? "Event ops"
+                  ? "Club spaces"
+                  : presence.route.startsWith("/projects")
+                  ? "Tasks"
                   : presence.route.startsWith("/calendar")
                     ? "Events"
                     : "Campus space"
@@ -147,7 +147,7 @@ export const office = queryGeneric({
           detail: "shared community spaces available right now",
         },
         {
-          label: "Event tasks",
+          label: "Tasks",
           value: formatCount(tasks.length),
           detail: "operations cards tracked across the campus board",
         },

@@ -6,9 +6,9 @@ export const projectsSection: WorkspaceSection = {
   id: "projects",
   href: "/projects",
   match: "prefix",
-  navLabel: "Event Ops",
-  title: "Event Ops",
-  subtitle: "Track tasks and ownership.",
-  room: "event-ops",
+  navLabel: "Tasks",
+  title: "Tasks",
+  subtitle: "Track work and ownership.",
+  room: "tasks",
   icon: FolderKanbanIcon,
 }

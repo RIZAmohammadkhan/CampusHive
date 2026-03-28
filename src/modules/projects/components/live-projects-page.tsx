@@ -3,6 +3,7 @@
 import type { FormEvent } from "react"
 import { useState, useTransition } from "react"
 import {
+  ChevronDownIcon,
   Clock3Icon,
   PlusIcon,
   SparklesIcon,
@@ -89,7 +90,7 @@ function TaskComposerModal({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="do-eyebrow">New Task</p>
-            <h3 className="mt-2 do-subheading">Add work to Event Ops</h3>
+            <h3 className="mt-2 do-subheading">Add work to Tasks</h3>
             <p className="mt-3 max-w-xl text-[13px] leading-6 text-tan">
               Create a task, set the current status, and assign an owner if one is already clear.
             </p>
@@ -189,6 +190,30 @@ function statusPill(status: (typeof statusOptions)[number]["id"]) {
   return "Blocked"
 }
 
+function formatUpdated(timestamp: number | null) {
+  if (!timestamp) {
+    return "Not updated yet"
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp))
+}
+
+function assigneeInitials(name: string | null) {
+  const value = name?.trim() ?? ""
+
+  if (!value) {
+    return "?"
+  }
+
+  const words = value.split(/\s+/).filter(Boolean).slice(0, 2)
+  return words.map((word) => word.charAt(0).toUpperCase()).join("")
+}
+
 export function LiveProjectsPage({ workspaceSlug }: { workspaceSlug: string }) {
   const enabled = useConvexConfigured()
 
@@ -224,6 +249,7 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   const [assigneeUserId, setAssigneeUserId] = useState("")
   const [isPending, startTransition] = useTransition()
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null)
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
 
   if (data === undefined || data === null) {
     return (
@@ -268,10 +294,10 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
 
         resetComposer()
         setIsComposerOpen(false)
-        toast.success("Event task created")
+        toast.success("Task created")
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to create event task."
+          error instanceof Error ? error.message : "Failed to create task."
         )
       }
     })
@@ -353,7 +379,7 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
           <div className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
             <div>
               <p className="do-eyebrow">Tasks</p>
-              <h2 className="mt-2 do-subheading">Event work in one board.</h2>
+              <h2 className="mt-2 do-subheading">Work in one board.</h2>
               <p className="mt-3 max-w-2xl text-[14px] leading-7 text-tan">
                 Track ownership, progress, and blockers for the work behind each event.
               </p>
@@ -438,63 +464,100 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                   <div className="space-y-3 p-4">
                     {column.cards.map((card) => (
                       <div key={card.id} className="do-card p-4">
-                        <p className="text-[15px] font-medium text-cream">{card.title}</p>
-                        {card.description ? (
-                          <p className="mt-2 text-[12px] leading-6 text-tan">
-                            {card.description}
-                          </p>
+                        <button
+                          type="button"
+                          className="flex w-full items-start gap-3 text-left"
+                          onClick={() =>
+                            setExpandedTaskId((current) =>
+                              current === card.id ? null : card.id
+                            )
+                          }
+                        >
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[12px] font-medium text-cream">
+                            {assigneeInitials(card.assigneeName)}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-start justify-between gap-3">
+                              <span className="min-w-0">
+                                <span className="block truncate text-[15px] font-medium text-cream">
+                                  {card.title}
+                                </span>
+                                <span className="mt-1 block text-[12px] leading-6 text-tan">
+                                  {card.assigneeName
+                                    ? `Assigned to ${card.assigneeName}`
+                                    : "Unassigned"}
+                                </span>
+                              </span>
+                              <ChevronDownIcon
+                                className={`mt-1 size-4 shrink-0 text-tan transition-transform ${
+                                  expandedTaskId === card.id ? "rotate-180" : ""
+                                }`}
+                              />
+                            </span>
+                            <span className="mt-3 flex flex-wrap gap-2">
+                              <span className="do-pill">{card.priority}</span>
+                              <span className="do-pill">{statusPill(card.status)}</span>
+                            </span>
+                          </span>
+                        </button>
+
+                        {expandedTaskId === card.id ? (
+                          <div className="mt-4 border-t border-hairline/80 pt-4">
+                            {card.description ? (
+                              <p className="text-[12px] leading-6 text-tan">
+                                {card.description}
+                              </p>
+                            ) : (
+                              <p className="text-[12px] leading-6 text-tan">
+                                No extra notes.
+                              </p>
+                            )}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <span className="do-pill">{card.dueLabel}</span>
+                              <span className="do-pill">Updated {formatUpdated(card.updatedAt)}</span>
+                            </div>
+                            <div className="mt-4 space-y-3">
+                              <select
+                                value={card.status}
+                                onChange={(event) =>
+                                  handleUpdateStatus(
+                                    card.id,
+                                    event.target.value as
+                                      | "acknowledged"
+                                      | "inProgress"
+                                      | "done"
+                                      | "flagged"
+                                  )
+                                }
+                                className={`${selectClassName} w-full`}
+                                disabled={isPending && pendingTaskId === card.id}
+                              >
+                                {statusOptions.map((option) => (
+                                  <option key={option.id} value={option.id}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              {data.canManage ? (
+                                <select
+                                  value={card.assigneeUserId ?? ""}
+                                  onChange={(event) =>
+                                    handleAssignTask(card.id, event.target.value)
+                                  }
+                                  className={`${selectClassName} w-full`}
+                                  disabled={isPending && pendingTaskId === card.id}
+                                >
+                                  <option value="">Unassigned</option>
+                                  {data.members.map((member) => (
+                                    <option key={member.id} value={member.id}>
+                                      {member.name} ({member.role})
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : null}
+                            </div>
+                          </div>
                         ) : null}
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <span className="do-pill">{card.priority}</span>
-                          <span className="do-pill">{card.dueLabel}</span>
-                          <span className="do-pill">{statusPill(card.status)}</span>
-                        </div>
-                        <div className="mt-4 space-y-3">
-                          <select
-                            value={card.status}
-                            onChange={(event) =>
-                              handleUpdateStatus(
-                                card.id,
-                                event.target.value as
-                                  | "acknowledged"
-                                  | "inProgress"
-                                  | "done"
-                                  | "flagged"
-                              )
-                            }
-                            className={`${selectClassName} w-full`}
-                            disabled={isPending && pendingTaskId === card.id}
-                          >
-                            {statusOptions.map((option) => (
-                              <option key={option.id} value={option.id}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          {data.canManage ? (
-                            <select
-                              value={card.assigneeUserId ?? ""}
-                              onChange={(event) =>
-                                handleAssignTask(card.id, event.target.value)
-                              }
-                              className={`${selectClassName} w-full`}
-                              disabled={isPending && pendingTaskId === card.id}
-                            >
-                              <option value="">Unassigned</option>
-                              {data.members.map((member) => (
-                                <option key={member.id} value={member.id}>
-                                  {member.name} ({member.role})
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <p className="text-[12px] leading-6 text-tan">
-                              {card.assigneeName
-                                ? `Owned by ${card.assigneeName}`
-                                : "No owner yet"}
-                            </p>
-                          )}
-                        </div>
                       </div>
                     ))}
                   </div>
