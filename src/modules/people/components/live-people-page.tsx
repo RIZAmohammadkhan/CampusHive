@@ -93,6 +93,7 @@ function LivePeoplePageInner({ workspaceSlug }: { workspaceSlug: string }) {
   )
   const activeCount = directory.members.filter((member) => member.isActive).length
   const adminCount = directory.members.filter((member) => member.role === "admin").length
+  const summary = `${directory.members.length} people · ${activeCount} active · ${adminCount} admins`
 
   const messageMember = (userId: string) => {
     setPendingUserId(userId)
@@ -114,108 +115,83 @@ function LivePeoplePageInner({ workspaceSlug }: { workspaceSlug: string }) {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="do-surface overflow-hidden p-6 md:p-8">
-        <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
-          <div>
+    <section className="do-surface overflow-hidden">
+      <div className="border-b border-hairline px-5 py-5 sm:px-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-1">
             <p className="do-eyebrow">People</p>
-            <h2 className="mt-2 do-subheading">Profiles that actually help you work.</h2>
-            <p className="mt-3 max-w-2xl text-[14px] leading-7 text-tan">
-              Browse the campus directory, jump into full member pages, and start direct
-              messages without losing context.
-            </p>
+            <h2 className="text-[28px] font-semibold tracking-tight text-cream">
+              Directory
+            </h2>
+            <p className="text-[13px] leading-6 text-tan">{summary}</p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="do-card p-5">
-              <p className="do-stat-label">Members</p>
-              <p className="mt-4 do-stat-value">{directory.members.length}</p>
-            </div>
-            <div className="do-card p-5">
-              <p className="do-stat-label">Active now</p>
-              <p className="mt-4 do-stat-value">{activeCount}</p>
-            </div>
-            <div className="do-card p-5">
-              <p className="do-stat-label">Admins</p>
-              <p className="mt-4 do-stat-value">{adminCount}</p>
-            </div>
+          <div className="relative w-full md:max-w-xs">
+            <SearchIcon className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-tan" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search"
+              className="pl-10"
+            />
           </div>
         </div>
+      </div>
 
-        <div className="relative mt-6">
-          <SearchIcon className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-tan" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search people by name, email, or role"
-            className="pl-10"
-          />
-        </div>
-      </section>
-
-      <section className="do-panel p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="do-eyebrow">Directory</p>
-            <h3 className="mt-2 text-[24px] font-medium text-cream">Member profiles</h3>
-          </div>
-          <span className="do-pill">{members.length}</span>
-        </div>
-
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          {members.length ? (
-            members.map((member) => (
-              <div key={member.id} className="do-card p-5">
-                <div className="flex items-start gap-4">
-                  <Link
-                    href={workspacePersonPath(workspaceSlug, member.id)}
-                    className="flex min-w-0 flex-1 items-start gap-4"
+      {members.length ? (
+        <div className="divide-y divide-hairline">
+          {members.map((member) => (
+            <div key={member.id} className="px-5 py-4 sm:px-6">
+              <div className="flex items-center gap-3">
+                <Link
+                  href={workspacePersonPath(workspaceSlug, member.id)}
+                  className="flex min-w-0 flex-1 items-center gap-3"
+                >
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[13px] font-medium text-cream">
+                    {member.name.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-[15px] font-medium text-cream">
+                        {member.name}
+                      </span>
+                      {member.isCurrentUser ? (
+                        <span className="text-[12px] text-tan">You</span>
+                      ) : null}
+                      <PresenceDot
+                        status={member.isActive ? "online" : "offline"}
+                        className="size-2.5"
+                      />
+                    </span>
+                    <span className="mt-1 block truncate text-[12px] leading-5 text-tan">
+                      {member.role === "admin" ? "College admin" : "Student"}
+                      {member.email ? ` · ${member.email}` : ""}
+                    </span>
+                    <span className="block text-[12px] leading-5 text-tan">
+                      {formatLastSeen(member.lastSeenAt, member.isActive)}
+                    </span>
+                  </span>
+                </Link>
+                {!member.isCurrentUser ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPending && pendingUserId === member.id}
+                    onClick={() => messageMember(member.id)}
                   >
-                    <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[14px] font-medium text-cream">
-                      {member.name.charAt(0).toUpperCase()}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-[16px] font-medium text-cream">
-                          {member.name}
-                        </span>
-                        {member.isCurrentUser ? <span className="do-pill">You</span> : null}
-                        <PresenceDot
-                          status={member.isActive ? "online" : "offline"}
-                          className="size-2.5"
-                        />
-                      </span>
-                      <span className="mt-2 block text-[12px] leading-6 text-tan">
-                        {member.role === "admin" ? "College admin" : "Student member"}
-                      </span>
-                      <span className="block truncate text-[12px] leading-6 text-tan">
-                        {member.email ?? "No email synced"}
-                      </span>
-                      <span className="block text-[12px] leading-6 text-tan">
-                        {formatLastSeen(member.lastSeenAt, member.isActive)}
-                      </span>
-                    </span>
-                  </Link>
-                  {!member.isCurrentUser ? (
-                    <Button
-                      size="sm"
-                      disabled={isPending && pendingUserId === member.id}
-                      onClick={() => messageMember(member.id)}
-                    >
-                      <MessageCircleIcon className="size-4" />
-                      Message
-                    </Button>
-                  ) : null}
-                </div>
+                    <MessageCircleIcon className="size-4" />
+                    Message
+                  </Button>
+                ) : null}
               </div>
-            ))
-          ) : (
-            <div className="rounded-[20px] border border-dashed border-hairline bg-surface/55 p-6 text-[13px] leading-6 text-tan lg:col-span-2">
-              No members match this search.
             </div>
-          )}
+          ))}
         </div>
-      </section>
-    </div>
+      ) : (
+        <div className="px-5 py-8 text-[13px] leading-6 text-tan sm:px-6">
+          No members match this search.
+        </div>
+      )}
+    </section>
   )
 }

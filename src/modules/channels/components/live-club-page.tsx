@@ -14,7 +14,6 @@ import {
   CheckCircle2Icon,
   CheckIcon,
   ClipboardListIcon,
-  Clock3Icon,
   HashIcon,
   MapPinIcon,
   MessageSquareTextIcon,
@@ -42,7 +41,11 @@ import {
   workspaceClubsPath,
   workspacePersonPath,
 } from "@/lib/workspaces"
-import { channelsApi, type MessageData } from "@/modules/channels/api"
+import {
+  channelsApi,
+  type ClubOperationsData,
+  type MessageData,
+} from "@/modules/channels/api"
 import {
   clubRoleLabel,
   defaultDiscussionSlug,
@@ -59,6 +62,11 @@ const selectClassName =
   "h-10 rounded-[8px] border border-[rgba(255,255,255,0.08)] bg-field px-3 text-[13px] text-parchment outline-none transition-[border-color,box-shadow] focus:border-[rgba(201,132,122,0.5)] focus:ring-3 focus:ring-[rgba(201,132,122,0.18)]"
 const textareaClassName =
   "min-h-28 w-full rounded-[8px] border border-[rgba(255,255,255,0.08)] bg-field px-3 py-3 text-[13px] leading-6 text-parchment outline-none transition-[border-color,box-shadow] duration-150 ease-out placeholder:text-tan focus:border-[rgba(201,132,122,0.5)] focus:ring-3 focus:ring-[rgba(201,132,122,0.18)]"
+const maxPollOptions = 6
+
+function createEmptyPollOptions() {
+  return ["", ""]
+}
 
 type ActionRunner = (
   key: string,
@@ -209,6 +217,295 @@ function ClubHero({
         </div>
       </div>
     </section>
+  )
+}
+
+function PollComposerModal({
+  open,
+  canManage,
+  question,
+  setQuestion,
+  description,
+  setDescription,
+  options,
+  onOptionChange,
+  onAddOption,
+  onRemoveOption,
+  isPending,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean
+  canManage: boolean
+  question: string
+  setQuestion: (value: string) => void
+  description: string
+  setDescription: (value: string) => void
+  options: string[]
+  onOptionChange: (index: number, value: string) => void
+  onAddOption: () => void
+  onRemoveOption: (index: number) => void
+  isPending: boolean
+  onClose: () => void
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  if (!open || !canManage) {
+    return null
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-4 backdrop-blur-sm md:items-center md:p-6"
+      onClick={onClose}
+    >
+      <div
+        className="do-surface w-full max-w-2xl p-6 md:p-7"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="do-eyebrow">New Poll</p>
+            <h3 className="mt-2 do-subheading">Post a poll to this channel</h3>
+            <p className="mt-3 max-w-xl text-[13px] leading-6 text-tan">
+              Ask one clear question, add up to six options, and members can vote
+              without leaving the conversation.
+            </p>
+          </div>
+          <Button variant="outline" size="icon-sm" onClick={onClose} disabled={isPending}>
+            <XIcon className="size-4" />
+          </Button>
+        </div>
+
+        <form onSubmit={onSubmit} className="mt-6 space-y-4">
+          <Input
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="What should this channel decide?"
+            disabled={isPending}
+            autoFocus
+          />
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Optional context"
+            className={textareaClassName}
+            disabled={isPending}
+          />
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[12px] font-medium text-parchment">Options</p>
+              <span className="text-[12px] text-tan">
+                {options.filter((option) => option.trim()).length}/{maxPollOptions}
+              </span>
+            </div>
+
+            {options.map((option, index) => (
+              <div key={`poll-option-${index}`} className="flex items-center gap-2">
+                <Input
+                  value={option}
+                  onChange={(event) => onOptionChange(index, event.target.value)}
+                  placeholder={`Option ${index + 1}`}
+                  disabled={isPending}
+                />
+                {options.length > 2 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={() => onRemoveOption(index)}
+                    disabled={isPending}
+                  >
+                    <XIcon className="size-4" />
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+
+            {options.length < maxPollOptions ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onAddOption}
+                disabled={isPending}
+              >
+                <PlusIcon className="size-4" />
+                Add option
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <p className="text-[12px] leading-6 text-tan">
+              Members can change their vote while the poll is open.
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  isPending ||
+                  !question.trim() ||
+                  options.filter((option) => option.trim()).length < 2
+                }
+              >
+                <VoteIcon className="size-4" />
+                Publish poll
+              </Button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function ChannelPollPanel({
+  polls,
+  canManage,
+  isPending,
+  pendingAction,
+  onToggleStatus,
+  onVote,
+}: {
+  polls: ClubOperationsData["polls"]
+  canManage: boolean
+  isPending: boolean
+  pendingAction: string | null
+  onToggleStatus: (pollId: string, nextStatus: "open" | "closed") => void
+  onVote: (pollId: string, optionId: string, action: "vote" | "remove") => void
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[12px] font-medium text-parchment">Polls</p>
+          <p className="text-[12px] leading-5 text-tan">
+            Vote without leaving this channel.
+          </p>
+        </div>
+        <span className="text-[12px] text-tan">{polls.length}</span>
+      </div>
+
+      {polls.length ? (
+        <div className="space-y-3">
+          {polls.map((poll) => (
+            <div key={poll.id} className="rounded-[18px] border border-hairline bg-surface/55 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[15px] font-medium text-cream">{poll.question}</p>
+                    <span className="rounded-full border border-hairline px-2 py-0.5 text-[11px] text-tan">
+                      {poll.status}
+                    </span>
+                  </div>
+                  {poll.description ? (
+                    <p className="mt-2 text-[13px] leading-6 text-tan">{poll.description}</p>
+                  ) : null}
+                </div>
+
+                {canManage ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPending && pendingAction === `toggle-club-poll-${poll.id}`}
+                    onClick={() =>
+                      onToggleStatus(
+                        poll.id,
+                        poll.status === "open" ? "closed" : "open"
+                      )
+                    }
+                  >
+                    {poll.status === "open" ? "Close" : "Reopen"}
+                  </Button>
+                ) : null}
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {poll.options.map((option) => {
+                  const isSelected = poll.viewerVoteOptionId === option.id
+
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={cn(
+                        "w-full rounded-[16px] border p-3 text-left transition-colors",
+                        isSelected
+                          ? "border-[rgba(201,132,122,0.28)] bg-[rgba(201,132,122,0.14)]"
+                          : "border-hairline bg-surface/60 hover:bg-surface/80"
+                      )}
+                      disabled={
+                        poll.status !== "open" ||
+                        isSelected ||
+                        (isPending && pendingAction === `vote-club-poll-${poll.id}`)
+                      }
+                      onClick={() => onVote(poll.id, option.id, "vote")}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            {isSelected ? (
+                              <CheckIcon className="size-4 text-cream" />
+                            ) : null}
+                            <p className="truncate text-[14px] font-medium text-cream">
+                              {option.label}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-[12px] leading-5 text-tan">
+                            {option.votes} votes
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-[12px] font-medium text-tan">
+                          {option.percentage}%
+                        </span>
+                      </div>
+                      <div className="mt-3 h-2 rounded-full bg-field/70">
+                        <div
+                          className={cn(
+                            "h-2 rounded-full transition-[width] duration-200",
+                            isSelected ? "bg-cream" : "bg-sage"
+                          )}
+                          style={{ width: `${option.percentage}%` }}
+                        />
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2 text-[12px] text-tan">
+                  <span>{poll.totalVotes} votes</span>
+                  <span>Opened by {poll.createdByName}</span>
+                  <span>{formatShortDate(poll.createdAt)}</span>
+                </div>
+
+                {poll.status === "open" && poll.viewerVoteOptionId ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPending && pendingAction === `vote-club-poll-${poll.id}`}
+                    onClick={() =>
+                      onVote(poll.id, poll.viewerVoteOptionId as string, "remove")
+                    }
+                  >
+                    Take back vote
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-[16px] border border-dashed border-hairline bg-surface/45 px-4 py-5 text-[13px] leading-6 text-tan">
+          No polls in this channel yet.
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -612,6 +909,7 @@ function LiveClubPageInner({
   const clubOps = useQuery(channelsApi.clubOperations, {
     workspaceSlug,
     slug: clubSlug,
+    sectionSlug,
   })
   const sendMessage = useMutation(channelsApi.sendMessage)
   const markConversationRead = useMutation(channelsApi.markConversationRead)
@@ -639,9 +937,10 @@ function LiveClubPageInner({
   const [eventTime, setEventTime] = useState("")
   const [eventLocation, setEventLocation] = useState("")
   const [memberSearch, setMemberSearch] = useState("")
+  const [isPollComposerOpen, setIsPollComposerOpen] = useState(false)
   const [pollQuestion, setPollQuestion] = useState("")
   const [pollDescription, setPollDescription] = useState("")
-  const [pollOptions, setPollOptions] = useState("")
+  const [pollOptions, setPollOptions] = useState<string[]>(createEmptyPollOptions)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const deferredMemberSearch = useDeferredValue(memberSearch.trim().toLowerCase())
@@ -832,7 +1131,6 @@ function LiveClubPageInner({
   const handleCreatePoll = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const options = pollOptions
-      .split("\n")
       .map((option) => option.trim())
       .filter((option) => option.length > 0)
 
@@ -847,6 +1145,7 @@ function LiveClubPageInner({
         await createClubPoll({
           workspaceSlug,
           slug: clubSlug,
+          sectionSlug: selectedSection?.slug,
           question: pollQuestion.trim(),
           description: pollDescription.trim() || undefined,
           options,
@@ -856,8 +1155,41 @@ function LiveClubPageInner({
       () => {
         setPollQuestion("")
         setPollDescription("")
-        setPollOptions("")
+        setPollOptions(createEmptyPollOptions())
+        setIsPollComposerOpen(false)
       }
+    )
+  }
+
+  const handleOpenPollComposer = () => {
+    setIsPollComposerOpen(true)
+  }
+
+  const handleClosePollComposer = () => {
+    if (isPending && pendingAction === "create-club-poll") {
+      return
+    }
+
+    setIsPollComposerOpen(false)
+  }
+
+  const handlePollOptionChange = (index: number, value: string) => {
+    setPollOptions((current) =>
+      current.map((option, optionIndex) =>
+        optionIndex === index ? value : option
+      )
+    )
+  }
+
+  const handleAddPollOption = () => {
+    setPollOptions((current) =>
+      current.length >= maxPollOptions ? current : [...current, ""]
+    )
+  }
+
+  const handleRemovePollOption = (index: number) => {
+    setPollOptions((current) =>
+      current.filter((_, optionIndex) => optionIndex !== index)
     )
   }
 
@@ -1364,204 +1696,28 @@ function LiveClubPageInner({
                 </div>
               </section>
 
-              <section className="do-panel p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="do-eyebrow">Polls</p>
-                    <h3 className="mt-2 text-[24px] font-medium text-cream">
-                      Club decisions
-                    </h3>
-                  </div>
-                  {!clubOps.canManage ? (
-                    <span className="do-pill">Managers publish polls</span>
-                  ) : null}
-                </div>
-
-                <div className="mt-5 grid gap-4 2xl:grid-cols-[320px_1fr]">
-                  <div className="do-card p-4">
-                    <div className="inline-flex items-center gap-2 text-[12px] text-parchment">
-                      <VoteIcon className="size-4 text-sage" />
-                      Create poll
-                    </div>
-
-                    <form onSubmit={handleCreatePoll} className="mt-4 space-y-3">
-                      <Input
-                        value={pollQuestion}
-                        onChange={(event) => setPollQuestion(event.target.value)}
-                        placeholder="What should the club decide?"
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-poll")
-                        }
-                      />
-                      <textarea
-                        value={pollDescription}
-                        onChange={(event) => setPollDescription(event.target.value)}
-                        placeholder="Optional context"
-                        className={textareaClassName}
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-poll")
-                        }
-                      />
-                      <textarea
-                        value={pollOptions}
-                        onChange={(event) => setPollOptions(event.target.value)}
-                        placeholder={"Option one\nOption two\nOption three"}
-                        className={textareaClassName}
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-poll")
-                        }
-                      />
-                      <Button
-                        type="submit"
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-poll") ||
-                          !pollQuestion.trim() ||
-                          !pollOptions.trim()
-                        }
-                      >
-                        <PlusIcon className="size-4" />
-                        Publish poll
-                      </Button>
-                    </form>
-                  </div>
-
-                  <div className="space-y-4">
-                    {clubOps.polls.length ? (
-                      clubOps.polls.map((poll) => (
-                        <div key={poll.id} className="do-card p-5">
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-[17px] font-medium text-cream">
-                                  {poll.question}
-                                </p>
-                                <span className="do-pill">{poll.status}</span>
-                                <span className="do-pill">
-                                  <ClipboardListIcon className="size-3.5" />
-                                  {poll.totalVotes} votes
-                                </span>
-                              </div>
-                              {poll.description ? (
-                                <p className="mt-3 text-[13px] leading-6 text-tan">
-                                  {poll.description}
-                                </p>
-                              ) : null}
-                            </div>
-
-                            {clubOps.canManage ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={
-                                  isPending &&
-                                  pendingAction === `toggle-club-poll-${poll.id}`
-                                }
-                                onClick={() =>
-                                  runAction(
-                                    `toggle-club-poll-${poll.id}`,
-                                    () =>
-                                      setClubPollStatus({
-                                        workspaceSlug,
-                                        slug: clubSlug,
-                                        pollId: poll.id,
-                                        status: poll.status === "open" ? "closed" : "open",
-                                      }),
-                                    poll.status === "open"
-                                      ? "Club poll closed"
-                                      : "Club poll reopened"
-                                  )
-                                }
-                              >
-                                {poll.status === "open" ? "Close poll" : "Reopen poll"}
-                              </Button>
-                            ) : null}
-                          </div>
-
-                          <div className="mt-4 space-y-3">
-                            {poll.options.map((option) => {
-                              const isSelected = poll.viewerVoteOptionId === option.id
-
-                              return (
-                                <div
-                                  key={option.id}
-                                  className={cn(
-                                    "rounded-[20px] border p-3 transition-colors",
-                                    isSelected
-                                      ? "border-ring bg-active-row/70"
-                                      : "border-hairline bg-surface/55"
-                                  )}
-                                >
-                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                      <p className="text-[14px] font-medium text-cream">
-                                        {option.label}
-                                      </p>
-                                      <p className="mt-1 text-[12px] leading-6 text-tan">
-                                        {option.votes} votes · {option.percentage}% of turnout
-                                      </p>
-                                    </div>
-                                    <Button
-                                      size="sm"
-                                      variant={isSelected ? "default" : "outline"}
-                                      disabled={
-                                        poll.status !== "open" ||
-                                        (isPending &&
-                                          pendingAction === `vote-club-poll-${poll.id}`)
-                                      }
-                                      onClick={() =>
-                                        runAction(
-                                          `vote-club-poll-${poll.id}`,
-                                          () =>
-                                            voteOnClubPoll({
-                                              workspaceSlug,
-                                              slug: clubSlug,
-                                              pollId: poll.id,
-                                              optionId: option.id,
-                                            }),
-                                          "Vote recorded"
-                                        )
-                                      }
-                                    >
-                                      {isSelected ? "Selected" : "Vote"}
-                                    </Button>
-                                  </div>
-                                  <div className="mt-3 h-2 rounded-full bg-field/70">
-                                    <div
-                                      className={cn(
-                                        "h-2 rounded-full transition-[width] duration-200",
-                                        isSelected ? "bg-cream" : "bg-sage"
-                                      )}
-                                      style={{ width: `${option.percentage}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <span className="do-pill">Opened by {poll.createdByName}</span>
-                            <span className="do-pill">
-                              <Clock3Icon className="size-3.5" />
-                              {formatShortDate(poll.createdAt)}
-                            </span>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded-[24px] border border-dashed border-hairline bg-surface/55 p-5 text-[13px] leading-6 text-tan">
-                        No polls yet.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </section>
             </>
           ) : null}
+
+          <section className="do-panel p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="do-eyebrow">Polls</p>
+                <h3 className="mt-2 text-[20px] font-medium text-cream">
+                  Use polls in channels
+                </h3>
+                <p className="mt-2 text-[13px] leading-6 text-tan">
+                  Open a discussion section to create and vote on polls in context.
+                </p>
+              </div>
+              <Link
+                href={discussionHref}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+              >
+                Open discussion
+              </Link>
+            </div>
+          </section>
         </main>
 
         <aside className="space-y-4">{membershipSidebar}</aside>
@@ -1623,37 +1779,103 @@ function LiveClubPageInner({
   }
 
   return (
-    <MinimalChatThread
-      backHref={workspaceClubsPath(workspaceSlug)}
-      backLabel="Clubs"
-      title={selectedSection?.name ?? conversation.name}
-      subtitle={selectedSection?.description ?? conversation.name}
-      scopeLabel={conversation.name}
-      headerAction={
-        <Link
-          href={overviewHref}
-          className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
-        >
-          Overview
-        </Link>
-      }
-      threadLinks={discussionSections.map((section) => ({
-        active: selectedSection?.slug === section.slug,
-        href: workspaceClubDiscussionPath(workspaceSlug, clubSlug, section.slug),
-        label: section.name,
-      }))}
-      messages={messages as MessageData[]}
-      canPostMessages={canPostMessages}
-      draft={message}
-      onDraftChange={setMessage}
-      onSubmit={handleSubmit}
-      isPending={isPending && pendingAction === "send-message"}
-      placeholder={
-        selectedSection ? `Message #${selectedSection.slug}` : "Message this club"
-      }
-      emptyState="No messages yet. Start the conversation."
-      composerHint={`Keep this section focused on ${selectedSection?.name ?? "the topic"}.`}
-      authorHref={(authorId) => workspacePersonPath(workspaceSlug, authorId)}
-    />
+    <>
+      <PollComposerModal
+        open={isPollComposerOpen}
+        canManage={clubOps.canManage}
+        question={pollQuestion}
+        setQuestion={setPollQuestion}
+        description={pollDescription}
+        setDescription={setPollDescription}
+        options={pollOptions}
+        onOptionChange={handlePollOptionChange}
+        onAddOption={handleAddPollOption}
+        onRemoveOption={handleRemovePollOption}
+        isPending={isPending && pendingAction === "create-club-poll"}
+        onClose={handleClosePollComposer}
+        onSubmit={handleCreatePoll}
+      />
+
+      <MinimalChatThread
+        backHref={workspaceClubsPath(workspaceSlug)}
+        backLabel="Clubs"
+        title={selectedSection?.name ?? conversation.name}
+        subtitle={selectedSection?.description ?? conversation.name}
+        scopeLabel={conversation.name}
+        headerAction={
+          <Link
+            href={overviewHref}
+            className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
+          >
+            Overview
+          </Link>
+        }
+        threadLinks={discussionSections.map((section) => ({
+          active: selectedSection?.slug === section.slug,
+          href: workspaceClubDiscussionPath(workspaceSlug, clubSlug, section.slug),
+          label: section.name,
+        }))}
+        topContent={
+          <ChannelPollPanel
+            polls={clubOps.polls}
+            canManage={clubOps.canManage}
+            isPending={isPending}
+            pendingAction={pendingAction}
+            onToggleStatus={(pollId, nextStatus) =>
+              runAction(
+                `toggle-club-poll-${pollId}`,
+                () =>
+                  setClubPollStatus({
+                    workspaceSlug,
+                    slug: clubSlug,
+                    pollId,
+                    status: nextStatus,
+                  }),
+                nextStatus === "closed" ? "Poll closed" : "Poll reopened"
+              )
+            }
+            onVote={(pollId, optionId, action) =>
+              runAction(
+                `vote-club-poll-${pollId}`,
+                () =>
+                  voteOnClubPoll({
+                    workspaceSlug,
+                    slug: clubSlug,
+                    pollId,
+                    optionId,
+                  }),
+                action === "remove" ? "Vote removed" : "Vote recorded"
+              )
+            }
+          />
+        }
+        messages={messages as MessageData[]}
+        canPostMessages={canPostMessages}
+        draft={message}
+        onDraftChange={setMessage}
+        onSubmit={handleSubmit}
+        isPending={isPending && pendingAction === "send-message"}
+        placeholder={
+          selectedSection ? `Message #${selectedSection.slug}` : "Message this club"
+        }
+        emptyState="No messages yet. Start the conversation."
+        composerHint={`Keep this section focused on ${selectedSection?.name ?? "the topic"}.`}
+        composerAction={
+          clubOps.canManage ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleOpenPollComposer}
+              disabled={isPending && pendingAction === "create-club-poll"}
+            >
+              <VoteIcon className="size-4" />
+              Create poll
+            </Button>
+          ) : undefined
+        }
+        authorHref={(authorId) => workspacePersonPath(workspaceSlug, authorId)}
+      />
+    </>
   )
 }

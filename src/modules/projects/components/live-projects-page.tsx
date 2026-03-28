@@ -3,13 +3,9 @@
 import type { FormEvent } from "react"
 import { useState, useTransition } from "react"
 import {
-  CalendarDaysIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
-  Clock3Icon,
   PlusIcon,
-  SparklesIcon,
-  TriangleAlertIcon,
   UserPlusIcon,
   XIcon,
 } from "lucide-react"
@@ -24,7 +20,6 @@ import { Input } from "@/components/ui/input"
 import { projectsApi } from "@/modules/projects/api"
 import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 
-const statIcons = [SparklesIcon, UserPlusIcon, TriangleAlertIcon]
 const selectClassName =
   "h-10 rounded-[8px] border border-[rgba(255,255,255,0.08)] bg-field px-3 text-[13px] text-parchment outline-none transition-[border-color,box-shadow] focus:border-[rgba(201,132,122,0.5)] focus:ring-3 focus:ring-[rgba(201,132,122,0.18)]"
 const textareaClassName =
@@ -322,7 +317,6 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   const tasks = Array.isArray(data.tasks) ? data.tasks : []
   const events = Array.isArray(data.events) ? data.events : []
   const members = Array.isArray(data.members) ? data.members : []
-  const summary = Array.isArray(data.summary) ? data.summary : []
   const hasTaskListData = Array.isArray(data.tasks)
   const filteredTasks = tasks.filter((task) => {
     if (listFilter === "open") {
@@ -346,6 +340,7 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   const volunteerOpenCount = tasks.filter(
     (task) => task.taskKind === "volunteer" && !task.assigneeUserId
   ).length
+  const summaryText = `${filteredTasks.length} visible · ${openTaskCount} open · ${volunteerOpenCount} volunteer`
 
   const resetComposer = () => {
     setEventId(events[0]?.id ?? "")
@@ -518,117 +513,71 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
       />
 
       <div className="space-y-6 lg:space-y-8">
-        <section className="do-surface overflow-hidden p-6">
-          <div className="grid gap-6 xl:grid-cols-[1.4fr_0.95fr]">
-            <div>
-              <p className="do-eyebrow">Tasks</p>
-              <h2 className="mt-2 do-subheading">Event work, in one clear list.</h2>
-              <p className="mt-3 max-w-2xl text-[14px] leading-7 text-tan">
-                Every task now belongs to a campus event, so organizers can publish
-                assignments, ask for volunteers, and keep the event team aligned from
-                one place.
-              </p>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <span className="do-pill">
-                  <CalendarDaysIcon className="size-3.5" />
-                  {events.length} events in filter
-                </span>
-                <span className="do-pill">
-                  <SparklesIcon className="size-3.5" />
-                  {filteredTasks.length} tasks visible
-                </span>
+        <section className="do-surface overflow-hidden">
+          <div className="border-b border-hairline px-5 py-5 sm:px-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="space-y-1">
+                <p className="do-eyebrow">Tasks</p>
+                <h2 className="text-[28px] font-semibold tracking-tight text-cream">
+                  Task list
+                </h2>
+                <p className="text-[13px] leading-6 text-tan">{summaryText}</p>
+                <p className="text-[12px] leading-5 text-tan">
+                  {data.canManage
+                    ? events.length
+                      ? "Add work for an event, assign it, or leave it open for volunteers."
+                      : "Create an event first to start adding tasks."
+                    : "Claim open volunteer work or track what is assigned to you."}
+                </p>
               </div>
-            </div>
 
-            <div className="do-card p-5">
-              <p className="do-eyebrow">Organizer tools</p>
-              <p className="mt-3 text-[20px] font-medium text-cream">
-                {data.canManage ? "Publish assignments and volunteer asks" : "Track event work"}
-              </p>
-              <p className="mt-3 text-[13px] leading-6 text-tan">
-                {data.canManage
-                  ? events.length
-                    ? "Create work items tied to a specific event, then assign them or leave them open for volunteers."
-                    : "Create at least one campus event before publishing tasks."
-                  : "Browse the event task list and step up for open volunteer slots when they appear."}
-              </p>
               {data.canManage ? (
-                <Button
-                  className="mt-5 w-full"
-                  onClick={openComposer}
-                  disabled={!events.length}
-                >
+                <Button onClick={openComposer} disabled={!events.length}>
                   <PlusIcon className="size-4" />
                   Add task
                 </Button>
               ) : null}
             </div>
-          </div>
-        </section>
 
-        <section className="grid gap-4 md:grid-cols-3">
-          {summary.map((metric, index) => {
-            const Icon = statIcons[index] ?? SparklesIcon
-
-            return (
-              <div key={metric.label} className="do-card p-5">
-                <Icon className="size-4 text-slate" />
-                <p className="mt-4 do-stat-label">{metric.label}</p>
-                <p className="mt-3 do-stat-value">{metric.value}</p>
-                <p className="mt-3 text-[12px] leading-6 text-tan">{metric.detail}</p>
-              </div>
-            )
-          })}
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="do-eyebrow">Filter</p>
-              <h3 className="mt-2 do-subheading">Task list</h3>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={listFilter === "all" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setListFilter("all")}
-                >
-                  All tasks
-                </Button>
-                <Button
-                  variant={listFilter === "open" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setListFilter("open")}
-                >
-                  Open tasks · {openTaskCount}
-                </Button>
-                <Button
-                  variant={listFilter === "mine" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setListFilter("mine")}
-                >
-                  My tasks · {myTaskCount}
-                </Button>
-                <Button
-                  variant={listFilter === "volunteer" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setListFilter("volunteer")}
-                >
-                  Volunteer asks · {volunteerOpenCount}
-                </Button>
-              </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                variant={listFilter === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setListFilter("all")}
+              >
+                All
+              </Button>
+              <Button
+                variant={listFilter === "open" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setListFilter("open")}
+              >
+                Open · {openTaskCount}
+              </Button>
+              <Button
+                variant={listFilter === "mine" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setListFilter("mine")}
+              >
+                Mine · {myTaskCount}
+              </Button>
+              <Button
+                variant={listFilter === "volunteer" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setListFilter("volunteer")}
+              >
+                Volunteer · {volunteerOpenCount}
+              </Button>
             </div>
           </div>
 
           {!hasTaskListData ? (
-            <div className="do-panel p-6 text-[13px] text-tan">
+            <div className="px-5 py-8 text-[13px] leading-6 text-tan sm:px-6">
               This page is waiting for the latest Convex backend shape. Run `npm run convex:dev`
               and refresh.
             </div>
           ) : filteredTasks.length ? (
-            <div className="space-y-4">
+            <div className="divide-y divide-hairline">
               {filteredTasks.map((task) => {
                 const canEditStatus =
                   data.canManage ||
@@ -640,27 +589,26 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                   task.status !== "done"
 
                 return (
-                  <div key={task.id} className="do-panel p-5">
+                  <div key={task.id} className="px-5 py-4 sm:px-6">
                     <button
                       type="button"
-                      className="flex w-full items-start gap-4 text-left"
+                      className="flex w-full items-start gap-3 text-left"
                       onClick={() =>
                         setExpandedTaskId((current) => (current === task.id ? null : task.id))
                       }
                     >
-                      <span className="flex size-11 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[12px] font-medium text-cream">
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[12px] font-medium text-cream">
                         {assigneeInitials(task.assigneeName)}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-start justify-between gap-3">
                           <span className="min-w-0">
-                            <span className="block text-[12px] tracking-[0.14em] text-tan uppercase">
-                              {task.eventTitle}
-                            </span>
-                            <span className="mt-2 block truncate text-[18px] font-medium text-cream">
+                            <span className="block truncate text-[15px] font-medium text-cream">
                               {task.title}
                             </span>
-                            <span className="mt-2 block text-[12px] leading-6 text-tan">
+                            <span className="mt-1 block truncate text-[12px] leading-5 text-tan">
+                              {task.eventTitle}
+                              {" · "}
                               {task.taskKind === "volunteer"
                                 ? task.assigneeName
                                   ? `Volunteer: ${task.assigneeName}`
@@ -669,6 +617,13 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                                   ? `Assigned to ${task.assigneeName}`
                                   : "No owner yet"}
                             </span>
+                            <span className="block text-[12px] leading-5 text-tan">
+                              {task.eventDateLabel}
+                              {" · "}
+                              {task.priority}
+                              {" · "}
+                              {task.statusLabel}
+                            </span>
                           </span>
                           <ChevronDownIcon
                             className={`mt-1 size-4 shrink-0 text-tan transition-transform ${
@@ -676,38 +631,24 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                             }`}
                           />
                         </span>
-                        <span className="mt-4 flex flex-wrap gap-2">
-                          <span className="do-pill">{task.eventDateLabel}</span>
-                          <span className="do-pill">{task.priority}</span>
-                          <span className="do-pill">{task.statusLabel}</span>
-                          <span className="do-pill">
-                            {task.taskKind === "volunteer" ? "Volunteer" : "Assigned"}
-                          </span>
-                        </span>
                       </span>
                     </button>
 
                     {expandedTaskId === task.id ? (
-                      <div className="mt-5 border-t border-hairline/80 pt-4">
+                      <div className="mt-4 border-t border-hairline pt-4">
                         <p className="text-[13px] leading-6 text-tan">
                           {task.description || "No extra notes yet."}
                         </p>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <span className="do-pill">{task.dueLabel}</span>
-                          <span className="do-pill">
-                            <Clock3Icon className="size-3.5" />
-                            Updated {formatUpdated(task.updatedAt)}
-                          </span>
-                          {task.completedAt ? (
-                            <span className="do-pill">
-                              <CheckCircle2Icon className="size-3.5" />
-                              Completed {formatUpdated(task.completedAt)}
-                            </span>
-                          ) : null}
-                        </div>
+                        <p className="mt-3 text-[12px] leading-5 text-tan">
+                          {task.dueLabel ? `${task.dueLabel} · ` : ""}
+                          Updated {formatUpdated(task.updatedAt)}
+                          {task.completedAt
+                            ? ` · Completed ${formatUpdated(task.completedAt)}`
+                            : ""}
+                        </p>
 
                         {task.completedAt ? (
-                          <div className="mt-4 rounded-[20px] border border-hairline bg-surface/55 p-4">
+                          <div className="mt-4 rounded-[16px] border border-hairline bg-surface/55 p-4">
                             <p className="do-eyebrow">Completion</p>
                             <p className="mt-2 text-[13px] leading-6 text-tan">
                               {task.completedByName
@@ -724,7 +665,7 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                               </p>
                             )}
                           </div>
-                        ) : null}
+                          ) : null}
 
                         <div className="mt-4 space-y-3">
                           {canEditStatus ? (
@@ -786,7 +727,7 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                           ) : null}
 
                           {canMarkComplete ? (
-                            <div className="rounded-[20px] border border-hairline bg-surface/55 p-4">
+                            <div className="rounded-[16px] border border-hairline bg-surface/55 p-4">
                               <p className="do-eyebrow">Mark complete</p>
                               <p className="mt-2 text-[12px] leading-6 text-tan">
                                 Add an optional note so everyone can see what was finished.
@@ -822,7 +763,7 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
               })}
             </div>
           ) : (
-            <div className="do-panel p-6 text-[13px] text-tan">
+            <div className="px-5 py-8 text-[13px] leading-6 text-tan sm:px-6">
               {listFilter === "mine"
                 ? "No tasks are currently assigned to you."
                 : listFilter === "volunteer"

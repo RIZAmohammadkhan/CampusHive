@@ -171,7 +171,7 @@ export const channelsApi = {
     MessageData[]
   >("chat:listMessages"),
   clubOperations: queryRef<
-    { workspaceSlug: string; slug: string },
+    { workspaceSlug: string; slug: string; sectionSlug?: string },
     ClubOperationsData | null
   >("chat:clubOperations"),
   createChannel: mutationRef<
@@ -236,6 +236,7 @@ export const channelsApi = {
     {
       workspaceSlug: string
       slug: string
+      sectionSlug?: string
       question: string
       description?: string
       options: string[]

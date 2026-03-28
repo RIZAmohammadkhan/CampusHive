@@ -3,12 +3,10 @@
 import type { FormEvent } from "react"
 import { useState, useTransition } from "react"
 import {
-  CalendarDaysIcon,
   Clock3Icon,
   MapPinIcon,
   MonitorIcon,
   PlusIcon,
-  SparklesIcon,
   XIcon,
 } from "lucide-react"
 import { useMutation, useQuery } from "convex/react"
@@ -203,6 +201,12 @@ function LiveCalendarPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   }
 
   const nextEvent = data.days.flatMap((day) => day.items).at(0) ?? null
+  const upcomingCount =
+    data.summary.find((metric) => metric.label.toLowerCase().includes("upcoming"))?.value ??
+    data.days.flatMap((day) => day.items).length.toString()
+  const summaryText = nextEvent
+    ? `${upcomingCount} upcoming · Next ${nextEvent.title} · ${nextEvent.time}`
+    : `${upcomingCount} upcoming`
 
   const resetComposer = () => {
     setTitle("")
@@ -263,143 +267,96 @@ function LiveCalendarPageInner({ workspaceSlug }: { workspaceSlug: string }) {
         onSubmit={handleCreateEvent}
       />
 
-      <div className="space-y-6 lg:space-y-8">
-        <section className="do-surface overflow-hidden p-6">
-          <div className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
-            <div>
-              <p className="do-eyebrow">Calendar</p>
-              <h2 className="mt-2 do-subheading">Shared campus schedule.</h2>
-              <p className="mt-3 max-w-2xl text-[14px] leading-7 text-tan">
-                A calmer view of what is happening across campus, with the next event
-                always in focus and the full schedule grouped by day.
+      <section className="do-surface overflow-hidden">
+        <div className="border-b border-hairline px-5 py-5 sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-1">
+              <p className="do-eyebrow">Events</p>
+              <h2 className="text-[28px] font-semibold tracking-tight text-cream">
+                Calendar
+              </h2>
+              <p className="text-[13px] leading-6 text-tan">{summaryText}</p>
+              <p className="text-[12px] leading-5 text-tan">
+                {data.canManage
+                  ? "Add events and keep the campus schedule current."
+                  : "Read-only schedule."}
               </p>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <span className="do-pill">
-                  <CalendarDaysIcon className="size-3.5" />
-                  {data.summary[0]?.value ?? "00"} upcoming
-                </span>
-                <span className="do-pill">
-                  <SparklesIcon className="size-3.5" />
-                  {data.canManage ? "You can publish events" : "Read-only access"}
-                </span>
-              </div>
             </div>
 
-            <div className="do-card p-5">
-              <p className="do-eyebrow">Next up</p>
-              {nextEvent ? (
-                <>
-                  <h3 className="mt-3 text-[20px] font-medium text-cream">
-                    {nextEvent.title}
-                  </h3>
-                  <div className="mt-4 space-y-2 text-[13px] leading-6 text-tan">
-                    <div className="flex items-center gap-2">
-                      <Clock3Icon className="size-4 text-terracotta" />
-                      <span>{nextEvent.time}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPinIcon className="size-4 text-terracotta" />
-                      <span>{nextEvent.location}</span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <p className="mt-3 text-[13px] leading-6 text-tan">
-                  No events are scheduled yet.
-                </p>
-              )}
-
-              {data.canManage ? (
-                <Button className="mt-5 w-full" onClick={() => setIsComposerOpen(true)}>
-                  <PlusIcon className="size-4" />
-                  Add event
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        </section>
-
-        <section className="grid gap-4 md:grid-cols-3">
-          {data.summary.map((metric) => (
-            <div key={metric.label} className="do-card p-5">
-              <p className="do-stat-label">{metric.label}</p>
-              <p className="mt-4 do-stat-value">{metric.value}</p>
-              <p className="mt-3 text-[12px] leading-6 text-tan">{metric.detail}</p>
-            </div>
-          ))}
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="do-eyebrow">Schedule</p>
-              <h3 className="mt-2 do-subheading">Upcoming by day</h3>
-            </div>
-            {!data.canManage ? (
-              <span className="do-pill">Only campus admins can add events</span>
+            {data.canManage ? (
+              <Button onClick={() => setIsComposerOpen(true)}>
+                <PlusIcon className="size-4" />
+                Add event
+              </Button>
             ) : null}
           </div>
+        </div>
 
-          {data.days.length ? (
-            <div className="space-y-4">
-              {data.days.map((day) => (
-                <div key={day.dayKey} className="do-panel overflow-hidden p-0">
-                  <div className="grid gap-0 lg:grid-cols-[220px_1fr]">
-                    <div className="border-b border-hairline bg-surface/55 p-5 lg:border-r lg:border-b-0">
-                      <p className="do-eyebrow">{day.dayName}</p>
-                      <h4 className="mt-2 text-[24px] font-medium text-cream">
-                        {day.dateLabel}
-                      </h4>
-                      <p className="mt-3 text-[12px] leading-6 text-tan">
-                        {day.items.length} scheduled {day.items.length === 1 ? "event" : "events"}
-                      </p>
-                    </div>
-
-                    <div className="divide-y divide-hairline">
-                      {day.items.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-[18px] font-medium text-cream">
-                                {item.title}
-                              </p>
-                              <span className="do-pill">{item.type}</span>
-                              {item.isVirtual ? (
-                                <span className="do-pill">
-                                  <MonitorIcon className="size-3.5" />
-                                  Virtual
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="mt-4 flex flex-wrap gap-2">
-                              <span className="do-pill">
-                                <Clock3Icon className="size-3.5" />
-                                {item.time}
-                              </span>
-                              <span className="do-pill">
-                                <MapPinIcon className="size-3.5" />
-                                {item.location}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+        {data.days.length ? (
+          <div className="divide-y divide-hairline">
+            {data.days.map((day) => (
+              <div key={day.dayKey}>
+                <div className="border-b border-hairline px-5 py-4 sm:px-6">
+                  <p className="do-eyebrow">{day.dayName}</p>
+                  <h3 className="mt-2 text-[18px] font-medium text-cream">
+                    {day.dateLabel}
+                  </h3>
+                  <p className="mt-1 text-[12px] leading-5 text-tan">
+                    {day.items.length} {day.items.length === 1 ? "event" : "events"}
+                  </p>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="do-panel p-6 text-[13px] text-tan">
-              No events scheduled yet.
-            </div>
-          )}
-        </section>
-      </div>
+
+                <div className="divide-y divide-hairline">
+                  {day.items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="px-5 py-4 sm:px-6"
+                    >
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-[15px] font-medium text-cream">
+                              {item.title}
+                            </p>
+                            <span className="text-[12px] text-tan">{item.type}</span>
+                            {item.isVirtual ? (
+                              <span className="text-[12px] text-tan">Virtual</span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-[12px] leading-5 text-tan">
+                            {item.time}
+                            {" · "}
+                            {item.location}
+                          </p>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-3 text-[12px] text-tan">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock3Icon className="size-3.5" />
+                            {item.time}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            {item.isVirtual ? (
+                              <MonitorIcon className="size-3.5" />
+                            ) : (
+                              <MapPinIcon className="size-3.5" />
+                            )}
+                            {item.isVirtual ? "Online" : "On site"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="px-5 py-8 text-[13px] leading-6 text-tan sm:px-6">
+            No events scheduled yet.
+          </div>
+        )}
+      </section>
     </>
   )
 }

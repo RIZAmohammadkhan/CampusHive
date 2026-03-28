@@ -239,6 +239,7 @@ export default defineSchema({
   clubPolls: defineTable({
     workspaceId: v.id("workspaces"),
     conversationId: v.id("conversations"),
+    sectionId: v.optional(v.id("clubDiscussionSections")),
     question: v.string(),
     description: v.optional(v.string()),
     status: pollStatus,

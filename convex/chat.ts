@@ -1255,6 +1255,7 @@ export const clubOperations = queryGeneric({
   args: {
     workspaceSlug: v.string(),
     slug: v.string(),
+    sectionSlug: v.optional(v.string()),
   },
   handler: async (ctx: ReadCtx, args) => {
     const identity = await requireIdentity(ctx)
@@ -1300,6 +1301,10 @@ export const clubOperations = queryGeneric({
         polls: [],
       }
     }
+    const discussionSections = await listDiscussionSectionSnapshots(ctx, convo)
+    const selectedSection = args.sectionSlug
+      ? selectDiscussionSection(discussionSections, args.sectionSlug)
+      : null
     const events = await ctx.db
       .query("clubEvents")
       .withIndex("by_conversation_and_created_at", (q) =>
@@ -1312,6 +1317,13 @@ export const clubOperations = queryGeneric({
         q.eq("conversationId", convo._id)
       )
       .collect()
+    const filteredPolls = selectedSection
+      ? polls.filter(
+          (poll) =>
+            !poll.sectionId ||
+            (selectedSection.id !== null && String(poll.sectionId) === selectedSection.id)
+        )
+      : polls
 
     const eventSnapshots = await Promise.all(
       events.map(async (event) => {
@@ -1416,7 +1428,7 @@ export const clubOperations = queryGeneric({
     })
 
     const pollSnapshots = await Promise.all(
-      polls.map(async (poll) => {
+      filteredPolls.map(async (poll) => {
         const [createdByUser, votes] = await Promise.all([
           ctx.db.get(poll.createdByUserId),
           ctx.db
@@ -1737,6 +1749,7 @@ export const createClubPoll = mutationGeneric({
   args: {
     workspaceSlug: v.string(),
     slug: v.string(),
+    sectionSlug: v.optional(v.string()),
     question: v.string(),
     description: v.optional(v.string()),
     options: v.array(v.string()),
@@ -1757,6 +1770,17 @@ export const createClubPoll = mutationGeneric({
     }
 
     const manager = await requireConversationManager(ctx, workspace, convo)
+    const discussionSections =
+      convo.slug === "general"
+        ? []
+        : await ensureStoredDiscussionSections(ctx, workspace._id, convo, manager.user._id)
+    const selectedSection =
+      convo.slug === "general"
+        ? null
+        : discussionSections.find((section) => section.slug === args.sectionSlug) ??
+          discussionSections.find((section) => section.slug === "general") ??
+          discussionSections[0] ??
+          null
     const question = normalizeChannelName(args.question)
     const description = normalizeOptionalString(args.description)
     const options = normalizePollOptions(args.options)
@@ -1776,6 +1800,7 @@ export const createClubPoll = mutationGeneric({
     const pollId = await ctx.db.insert("clubPolls", {
       workspaceId: workspace._id,
       conversationId: convo._id,
+      sectionId: selectedSection?._id,
       question,
       description,
       status: "open",
@@ -1845,6 +1870,11 @@ export const voteOnClubPoll = mutationGeneric({
     const now = Date.now()
 
     if (existingVote) {
+      if (existingVote.optionId === args.optionId) {
+        await ctx.db.delete(existingVote._id)
+        return null
+      }
+
       await ctx.db.patch(existingVote._id, {
         optionId: args.optionId,
         updatedAt: now,

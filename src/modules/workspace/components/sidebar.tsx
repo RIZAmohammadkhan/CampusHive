@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react"
 import { useOrganization } from "@clerk/nextjs"
-import { SparklesIcon } from "lucide-react"
 import { useConvexAuth, useQuery } from "convex/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -126,21 +125,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
   return (
     <aside className="w-full shrink-0 border-b border-hairline bg-sidebar/96 lg:sticky lg:top-0 lg:h-dvh lg:w-[280px] lg:border-r lg:border-b-0">
       <div className="flex h-full flex-col px-4 py-4">
-        <div className="flex items-center gap-3 px-1">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-[rgba(201,132,122,0.16)] bg-[linear-gradient(135deg,rgba(201,132,122,0.18),rgba(200,169,110,0.08))] text-rose">
-            <SparklesIcon className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate font-display text-[26px] leading-none text-parchment">
-              CampusHive
-            </p>
-            <p className="mt-1 truncate text-[11px] font-medium tracking-[0.08em] text-tan uppercase">
-              {workspaceName}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-6">
+        <div>
           <p className="px-1 text-[11px] font-semibold tracking-[0.08em] text-tan uppercase">
             Navigate
           </p>

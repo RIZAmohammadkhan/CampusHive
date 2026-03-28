@@ -7,8 +7,8 @@ export const dashboardSection: WorkspaceSection = {
   href: "/",
   match: "exact",
   navLabel: "Hub",
-  title: "Campus Hub",
-  subtitle: "Overview of activity and status.",
+  title: "Overview",
+  subtitle: "Only what matters right now.",
   room: "hub",
   icon: LayoutGridIcon,
 }

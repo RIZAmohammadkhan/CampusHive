@@ -29,6 +29,7 @@ export function MinimalChatThread({
   scopeLabel,
   headerAction,
   threadLinks = [],
+  topContent,
   messages,
   canPostMessages,
   draft,
@@ -38,6 +39,7 @@ export function MinimalChatThread({
   placeholder,
   emptyState,
   composerHint,
+  composerAction,
   authorHref,
 }: {
   backHref: string
@@ -47,6 +49,7 @@ export function MinimalChatThread({
   scopeLabel?: string
   headerAction?: ReactNode
   threadLinks?: ThreadLink[]
+  topContent?: ReactNode
   messages: MessageData[]
   canPostMessages: boolean
   draft: string
@@ -56,6 +59,7 @@ export function MinimalChatThread({
   placeholder: string
   emptyState: string
   composerHint?: string
+  composerAction?: ReactNode
   authorHref?: (authorId: string) => string | null
 }) {
   const timeline = buildMessageTimeline(messages)
@@ -115,6 +119,10 @@ export function MinimalChatThread({
         </div>
 
         <div className="bg-black/10">
+          {topContent ? (
+            <div className="border-b border-hairline px-4 py-4 sm:px-6">{topContent}</div>
+          ) : null}
+
           <div className="max-h-[68dvh] overflow-y-auto px-4 py-5 sm:px-6">
             {timeline.length === 0 ? (
               <div className="rounded-[16px] border border-dashed border-hairline bg-surface/45 px-4 py-5 text-[13px] leading-6 text-tan">
@@ -184,7 +192,7 @@ export function MinimalChatThread({
 
           {canPostMessages ? (
             <form onSubmit={onSubmit} className="border-t border-hairline px-4 py-4 sm:px-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex flex-col gap-3">
                 <textarea
                   value={draft}
                   onChange={(event) => onDraftChange(event.target.value)}
@@ -192,17 +200,22 @@ export function MinimalChatThread({
                   className={composerClassName}
                   disabled={isPending}
                 />
-                <Button
-                  type="submit"
-                  disabled={isPending || !draft.trim()}
-                  className="sm:shrink-0"
-                >
-                  Send
-                </Button>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {composerAction}
+                    {composerHint ? (
+                      <p className="text-[12px] leading-6 text-tan">{composerHint}</p>
+                    ) : null}
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isPending || !draft.trim()}
+                    className="sm:shrink-0"
+                  >
+                    Send
+                  </Button>
+                </div>
               </div>
-              {composerHint ? (
-                <p className="mt-2 text-[12px] leading-6 text-tan">{composerHint}</p>
-              ) : null}
             </form>
           ) : (
             <div className="border-t border-hairline px-4 py-4 text-[13px] leading-6 text-tan sm:px-6">

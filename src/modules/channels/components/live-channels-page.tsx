@@ -4,11 +4,8 @@ import { type FormEvent, useEffect, useState, useTransition } from "react"
 import Link from "next/link"
 import {
   ArrowRightIcon,
-  LockKeyholeIcon,
-  MessageSquareTextIcon,
   PlusIcon,
   SearchIcon,
-  UsersIcon,
   XIcon,
 } from "lucide-react"
 import { useMutation, useQuery } from "convex/react"
@@ -136,59 +133,46 @@ function ClubDirectoryCard({
   onRequestToJoin,
 }: ClubDirectoryCardProps) {
   return (
-    <article className="do-card p-5">
-      <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 gap-4">
-            <div className="flex size-14 shrink-0 items-center justify-center rounded-[18px] border border-hairline bg-panel/85 text-[16px] font-semibold tracking-[0.12em] text-cream">
-              {clubInitials(club.name)}
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-[18px] font-medium text-cream">{club.name}</h3>
-                <span className="do-pill">{club.category}</span>
-                <span className="do-pill">
-                  {club.access === "members" ? (
-                    <>
-                      <LockKeyholeIcon className="size-3.5" />
-                      Approval
-                    </>
-                  ) : (
-                    "Open"
-                  )}
-                </span>
-                <span className="do-pill">{membershipLabel(club.membershipState)}</span>
-                {club.viewerClubRole ? (
-                  <span className="do-pill">{clubRoleLabel(club.viewerClubRole)}</span>
-                ) : null}
-              </div>
-              <p className="mt-2 text-[13px] leading-6 text-tan">{club.description}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className="do-pill">
-                  <UsersIcon className="size-3.5" />
-                  {club.memberCount} members
-                </span>
-                <span className="do-pill">
-                  <MessageSquareTextIcon className="size-3.5" />
-                  {club.messageCount} messages
-                </span>
-                <span className="do-pill">{formatActivity(club.lastMessageAt)}</span>
-              </div>
-            </div>
+    <article className="px-5 py-4 sm:px-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/85 text-[12px] font-semibold tracking-[0.08em] text-cream">
+            {clubInitials(club.name)}
           </div>
 
-          <div className="rounded-[20px] border border-hairline bg-surface/55 px-4 py-3 text-right">
-            <p className="text-[10px] tracking-[0.16em] text-tan uppercase">Club ID</p>
-            <p className="mt-2 text-[14px] font-medium text-cream">#{club.slug}</p>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-[15px] font-medium text-cream">{club.name}</h3>
+              <span className="text-[12px] text-tan">{club.category}</span>
+              {club.viewerClubRole ? (
+                <span className="text-[12px] text-tan">
+                  {clubRoleLabel(club.viewerClubRole)}
+                </span>
+              ) : null}
+            </div>
+
+            <p className="mt-1 line-clamp-2 text-[13px] leading-6 text-tan">
+              {club.description || "No description yet."}
+            </p>
+
+            <p className="mt-1 text-[12px] leading-5 text-tan">
+              {club.memberCount} members
+              {" · "}
+              {club.access === "members" ? "Approval required" : "Open club"}
+              {" · "}
+              {membershipLabel(club.membershipState)}
+              {" · "}
+              {formatActivity(club.lastMessageAt)}
+            </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 lg:justify-end">
           <Link
             href={workspaceClubPath(workspaceSlug, club.slug)}
             className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
           >
-            Club profile
+            Details
           </Link>
           {club.canJoin ? (
             <Button
@@ -196,7 +180,7 @@ function ClubDirectoryCard({
               disabled={isPending && pendingJoinSlug === club.slug}
               onClick={() => onJoinOpenClub(club.slug)}
             >
-              Join club
+              Join
             </Button>
           ) : club.canOpen ? (
             <Link
@@ -207,7 +191,7 @@ function ClubDirectoryCard({
               )}
               className={cn(buttonVariants({ size: "sm" }))}
             >
-              Open discussion
+              Open
               <ArrowRightIcon className="size-4" />
             </Link>
           ) : club.canRequestToJoin ? (
@@ -216,10 +200,10 @@ function ClubDirectoryCard({
               disabled={isPending && pendingJoinSlug === club.slug}
               onClick={() => onRequestToJoin(club.slug)}
             >
-              Request to join
+              Request
             </Button>
           ) : (
-            <span className="do-pill">Waiting for approval</span>
+            <span className="text-[12px] text-tan">Waiting for approval</span>
           )}
         </div>
       </div>
@@ -253,19 +237,21 @@ function ClubSection({
   onRequestToJoin,
 }: ClubSectionProps) {
   return (
-    <section className="do-panel p-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="do-eyebrow">{eyebrow}</p>
-          <h3 className="mt-2 text-[22px] font-medium text-cream">{title}</h3>
-          <p className="mt-2 max-w-2xl text-[13px] leading-6 text-tan">{description}</p>
+    <section className="do-surface overflow-hidden">
+      <div className="border-b border-hairline px-5 py-5 sm:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="do-eyebrow">{eyebrow}</p>
+            <h3 className="mt-2 text-[20px] font-medium text-cream">{title}</h3>
+          </div>
+          <span className="text-[12px] text-tan">{clubs.length}</span>
         </div>
-        <span className="do-pill">{clubs.length}</span>
+        <p className="mt-1 text-[13px] leading-6 text-tan">{description}</p>
       </div>
 
-      <div className="mt-5 space-y-4">
-        {clubs.length ? (
-          clubs.map((club) => (
+      {clubs.length ? (
+        <div className="divide-y divide-hairline">
+          {clubs.map((club) => (
             <ClubDirectoryCard
               key={club.id}
               club={club}
@@ -275,13 +261,13 @@ function ClubSection({
               onJoinOpenClub={onJoinOpenClub}
               onRequestToJoin={onRequestToJoin}
             />
-          ))
-        ) : (
-          <div className="rounded-[20px] border border-dashed border-hairline bg-surface/50 p-5 text-[13px] leading-6 text-tan">
-            {emptyMessage}
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="px-5 py-8 text-[13px] leading-6 text-tan sm:px-6">
+          {emptyMessage}
+        </div>
+      )}
     </section>
   )
 }
@@ -377,6 +363,7 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
     (club) => club.viewerClubRole === null && club.membershipState === "pending"
   ).length
   const openClubCount = clubs.filter((club) => club.access === "public").length
+  const summary = `${joinedClubCount} joined · ${openClubCount} open · ${pendingClubCount} pending`
 
   const handleCreateChannel = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -440,70 +427,28 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
 
   return (
     <div className="space-y-6">
-      <section className="do-surface overflow-hidden p-6 md:p-8">
-        <div className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
-          <div className="space-y-6">
-            <div>
+      <section className="do-surface overflow-hidden">
+        <div className="border-b border-hairline px-5 py-5 sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-1">
               <p className="do-eyebrow">Clubs</p>
-              <h2 className="mt-2 do-subheading">Browse and join clubs.</h2>
-              <p className="mt-3 max-w-2xl text-[14px] leading-7 text-tan">
-                Find active clubs, open club pages, and manage memberships in one place.
-              </p>
+              <h2 className="text-[28px] font-semibold tracking-tight text-cream">
+                Directory
+              </h2>
+              <p className="text-[13px] leading-6 text-tan">{summary}</p>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="do-card p-5">
-                <p className="do-stat-label">Joined clubs</p>
-                <p className="mt-4 do-stat-value">{joinedClubCount}</p>
-                <p className="mt-2 text-[12px] leading-6 text-tan">
-                  Clubs where you already have access.
-                </p>
+            <div className="flex w-full flex-col gap-3 md:flex-row lg:w-auto lg:items-center">
+              <div className="relative w-full md:min-w-[240px]">
+                <SearchIcon className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-tan" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search"
+                  className="pl-10"
+                />
               </div>
-              <div className="do-card p-5">
-                <p className="do-stat-label">Open clubs</p>
-                <p className="mt-4 do-stat-value">{openClubCount}</p>
-                <p className="mt-2 text-[12px] leading-6 text-tan">
-                  Spaces you can join immediately.
-                </p>
-              </div>
-              <div className="do-card p-5">
-                <p className="do-stat-label">Pending approvals</p>
-                <p className="mt-4 do-stat-value">{pendingClubCount}</p>
-                <p className="mt-2 text-[12px] leading-6 text-tan">
-                  Requests that still need review.
-                </p>
-              </div>
-            </div>
 
-            <div className="relative">
-              <SearchIcon className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-tan" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search clubs"
-                className="pl-10"
-              />
-            </div>
-          </div>
-
-          <div className="do-card p-5">
-            <p className="do-eyebrow">{campusFeed ? "Campus feed" : "Clubs"}</p>
-            {campusFeed ? (
-              <>
-                <h3 className="mt-3 text-[20px] font-medium text-cream">
-                  {campusFeed.name}
-                </h3>
-                <p className="mt-3 text-[13px] leading-6 text-tan">
-                  Shared updates for everyone.
-                </p>
-              </>
-            ) : (
-              <p className="mt-3 text-[13px] leading-6 text-tan">
-                Club directory.
-              </p>
-            )}
-
-            <div className="mt-5 space-y-2">
               {campusFeed ? (
                 <Link
                   href={workspaceClubDiscussionPath(
@@ -511,14 +456,14 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                     campusFeed.slug,
                     defaultDiscussionSlug(campusFeed.isGeneral)
                   )}
-                  className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
                 >
                   Open feed
-                  <ArrowRightIcon className="size-4" />
                 </Link>
               ) : null}
+
               {isAdmin ? (
-                <Button className="w-full" onClick={() => setShowCreatePanel(true)}>
+                <Button size="sm" onClick={() => setShowCreatePanel(true)}>
                   <PlusIcon className="size-4" />
                   Add club
                 </Button>
@@ -531,7 +476,7 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
       <ClubSection
         title="Your active clubs"
         eyebrow="Joined"
-        description="Clubs you joined."
+        description="Clubs you can open now."
         emptyMessage={
           normalizedSearch
             ? "No joined clubs match this search."
@@ -550,7 +495,7 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
       <ClubSection
         title="Pending approvals"
         eyebrow="Queue"
-        description="Requests waiting for approval."
+        description="Requests waiting for review."
         emptyMessage={
           normalizedSearch
             ? "No pending clubs match this search."
@@ -567,7 +512,7 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
       <ClubSection
         title="Discover more clubs"
         eyebrow="Directory"
-        description="All available clubs."
+        description="Other clubs you can join or request."
         emptyMessage={
           normalizedSearch
             ? "No clubs match this search."
