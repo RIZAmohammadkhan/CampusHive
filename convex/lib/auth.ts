@@ -113,6 +113,8 @@ export async function upsertUser(
   {
     externalId,
     name,
+    firstName,
+    lastName,
     email,
     imageUrl,
     tokenIdentifier,
@@ -120,6 +122,8 @@ export async function upsertUser(
   }: {
     externalId: string
     name: string
+    firstName?: string
+    lastName?: string
     email?: string
     imageUrl?: string
     tokenIdentifier?: string
@@ -130,6 +134,8 @@ export async function upsertUser(
   const patch: Insert<"users"> = {
     externalId,
     name,
+    firstName,
+    lastName,
     email,
     imageUrl,
     tokenIdentifier,
@@ -159,6 +165,8 @@ export async function getOrCreateCurrentUser(
   ctx: MutationCtx,
   profile?: {
     name?: string
+    firstName?: string
+    lastName?: string
     email?: string
     imageUrl?: string
   }
@@ -168,6 +176,8 @@ export async function getOrCreateCurrentUser(
   return await upsertUser(ctx, {
     externalId: identity.subject,
     name: profile?.name ?? identity.name ?? "Student member",
+    firstName: profile?.firstName,
+    lastName: profile?.lastName,
     email:
       profile?.email ??
       (typeof identity.email === "string" ? identity.email : undefined),
@@ -257,6 +267,8 @@ export async function syncCurrentWorkspaceMember(
   workspace: Doc<"workspaces">,
   profile?: {
     name?: string
+    firstName?: string
+    lastName?: string
     email?: string
     imageUrl?: string
   }

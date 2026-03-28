@@ -112,13 +112,14 @@ Implemented today:
 - campus scoping through the active Clerk organization
 - backend admin checks for club-space creation, event creation, resource creation, and assignee changes
 - live member presence and task status updates
+- gate pass issuance, gate check-in, and poll persistence with live vote results
+- club-scoped event ticket generation with QR codes and clickable member profiles
 
 Not implemented yet:
 
 - manager/officer/member role tiers per club
 - club join requests
-- QR pass persistence
-- poll persistence
+- camera-based QR generation and scanning
 
 ## 9. Verification
 
@@ -146,3 +147,4 @@ npm run build
 - [convex/projects.ts](../convex/projects.ts)
 - [convex/events.ts](../convex/events.ts)
 - [convex/resources.ts](../convex/resources.ts)
+- [convex/whiteboard.ts](../convex/whiteboard.ts)

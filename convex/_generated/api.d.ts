@@ -17,6 +17,7 @@ import type * as presence from "../presence.js";
 import type * as projects from "../projects.js";
 import type * as resources from "../resources.js";
 import type * as types from "../types.js";
+import type * as whiteboard from "../whiteboard.js";
 import type * as workspaces from "../workspaces.js";
 
 import type {
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   resources: typeof resources;
   types: typeof types;
+  whiteboard: typeof whiteboard;
   workspaces: typeof workspaces;
 }>;
 

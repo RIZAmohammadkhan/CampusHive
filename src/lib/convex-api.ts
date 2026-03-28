@@ -126,6 +126,7 @@ export type MessageData = {
   body: string
   createdAt: number
   author: {
+    id: string
     name: string
     imageUrl: string | null
     isCurrentUser: boolean
@@ -198,6 +199,133 @@ export type ResourceLibraryData = {
   }>
 }
 
+export type MemberProfileData = {
+  id: string
+  name: string
+  firstName: string
+  lastName: string
+  email: string | null
+  imageUrl: string | null
+  workspaceName: string
+  workspaceSlug: string
+  workspaceRole: "admin" | "member"
+  joinedAt: number
+  clubMemberships: Array<{
+    id: string
+    slug: string
+    name: string
+    role: "owner" | "officer" | "member"
+    joinedAt: number
+  }>
+  eventTickets: Array<{
+    id: string
+    code: string
+    eventTitle: string
+    clubName: string
+    createdAt: number
+    checkedInAt: number | null
+  }>
+}
+
+export type ClubOperationsData = {
+  canManage: boolean
+  canParticipate: boolean
+  clubName: string
+  workspaceName: string
+  events: Array<{
+    id: string
+    title: string
+    summary: string | null
+    date: string
+    time: string
+    location: string
+    status: "open" | "closed"
+    createdAt: number
+    createdByName: string
+    ticketCount: number
+    checkedInCount: number
+    viewerTicket: {
+      id: string
+      code: string
+      createdAt: number
+      checkedInAt: number | null
+      attendeeName: string
+      attendeeEmail: string | null
+      organizationName: string
+      clubName: string
+      eventTitle: string
+      eventDate: string
+      eventTime: string
+      eventLocation: string
+      qrValue: string
+    } | null
+    attendees: Array<{
+      ticketId: string
+      userId: string
+      name: string
+      email: string | null
+      code: string
+      createdAt: number
+      checkedInAt: number | null
+      checkedInByName: string | null
+    }>
+  }>
+  polls: Array<{
+    id: string
+    question: string
+    description: string | null
+    status: "open" | "closed"
+    totalVotes: number
+    createdAt: number
+    createdByName: string
+    viewerVoteOptionId: string | null
+    options: Array<{
+      id: string
+      label: string
+      votes: number
+      percentage: number
+    }>
+  }>
+}
+
+export type WhiteboardControlRoomData = {
+  canManage: boolean
+  activeNow: number
+  summary: Array<{ label: string; value: string; detail: string }>
+  activeMembers: Array<{
+    name: string
+    routeLabel: string
+    lastSeenAt: number
+  }>
+  gatePasses: Array<{
+    id: string
+    code: string
+    attendeeName: string
+    attendeeEmail: string | null
+    note: string | null
+    createdAt: number
+    issuedByName: string
+    checkedInAt: number | null
+    checkedInByName: string | null
+  }>
+  polls: Array<{
+    id: string
+    question: string
+    description: string | null
+    status: "open" | "closed"
+    totalVotes: number
+    createdAt: number
+    createdByName: string
+    viewerVoteOptionId: string | null
+    options: Array<{
+      id: string
+      label: string
+      votes: number
+      percentage: number
+    }>
+  }>
+}
+
 export const convexApi = {
   workspaces: {
     bootstrap: mutationRef<
@@ -206,6 +334,8 @@ export const convexApi = {
         slug: string
         name: string
         userName?: string
+        userFirstName?: string
+        userLastName?: string
         userEmail?: string
         userImageUrl?: string
       },
@@ -217,6 +347,10 @@ export const convexApi = {
     directory: queryRef<{ workspaceSlug: string }, DirectoryData | null>(
       "workspaces:directory"
     ),
+    memberProfile: queryRef<
+      { workspaceSlug: string; userId: string },
+      MemberProfileData | null
+    >("workspaces:memberProfile"),
   },
   presence: {
     heartbeat: mutationRef<
@@ -239,10 +373,78 @@ export const convexApi = {
       { workspaceSlug: string; slug: string },
       MessageData[]
     >("chat:listMessages"),
+    clubOperations: queryRef<
+      { workspaceSlug: string; slug: string },
+      ClubOperationsData | null
+    >("chat:clubOperations"),
     createChannel: mutationRef<
       { workspaceSlug: string; name: string; description?: string },
       { channelId: string; slug: string }
     >("chat:createChannel"),
+    createClubEvent: mutationRef<
+      {
+        workspaceSlug: string
+        slug: string
+        title: string
+        summary?: string
+        date: string
+        time: string
+        location: string
+      },
+      { eventId: string }
+    >("chat:createClubEvent"),
+    joinClubEvent: mutationRef<
+      {
+        workspaceSlug: string
+        slug: string
+        eventId: string
+      },
+      { ticketId: string; code: string }
+    >("chat:joinClubEvent"),
+    checkInClubTicket: mutationRef<
+      {
+        workspaceSlug: string
+        slug: string
+        ticketId: string
+      },
+      null
+    >("chat:checkInClubTicket"),
+    resetClubTicket: mutationRef<
+      {
+        workspaceSlug: string
+        slug: string
+        ticketId: string
+      },
+      null
+    >("chat:resetClubTicket"),
+    createClubPoll: mutationRef<
+      {
+        workspaceSlug: string
+        slug: string
+        question: string
+        description?: string
+        options: string[]
+      },
+      { pollId: string }
+    >("chat:createClubPoll"),
+    voteOnClubPoll: mutationRef<
+      {
+        workspaceSlug: string
+        slug: string
+        pollId: string
+        optionId: string
+      },
+      null
+    >("chat:voteOnClubPoll"),
+    setClubPollStatus: mutationRef<
+      {
+        workspaceSlug: string
+        slug: string
+        pollId: string
+        status: "open" | "closed"
+      },
+      null
+    >("chat:setClubPollStatus"),
     requestToJoin: mutationRef<
       { workspaceSlug: string; slug: string },
       null
@@ -343,5 +545,58 @@ export const convexApi = {
       },
       { resourceId: string }
     >("resources:createResource"),
+  },
+  whiteboard: {
+    controlRoom: queryRef<{ workspaceSlug: string }, WhiteboardControlRoomData | null>(
+      "whiteboard:controlRoom"
+    ),
+    createGatePass: mutationRef<
+      {
+        workspaceSlug: string
+        attendeeName: string
+        attendeeEmail?: string
+        note?: string
+      },
+      { passId: string; code: string }
+    >("whiteboard:createGatePass"),
+    scanGatePass: mutationRef<
+      {
+        workspaceSlug: string
+        code: string
+      },
+      { passId: string; attendeeName: string; code: string }
+    >("whiteboard:scanGatePass"),
+    resetGatePass: mutationRef<
+      {
+        workspaceSlug: string
+        passId: string
+      },
+      null
+    >("whiteboard:resetGatePass"),
+    createPoll: mutationRef<
+      {
+        workspaceSlug: string
+        question: string
+        description?: string
+        options: string[]
+      },
+      { pollId: string }
+    >("whiteboard:createPoll"),
+    voteOnPoll: mutationRef<
+      {
+        workspaceSlug: string
+        pollId: string
+        optionId: string
+      },
+      null
+    >("whiteboard:voteOnPoll"),
+    setPollStatus: mutationRef<
+      {
+        workspaceSlug: string
+        pollId: string
+        status: "open" | "closed"
+      },
+      null
+    >("whiteboard:setPollStatus"),
   },
 }

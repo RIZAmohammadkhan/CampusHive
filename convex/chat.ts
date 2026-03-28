@@ -14,6 +14,8 @@ import type { Doc, Id, MutationCtx, ReadCtx } from "./types"
 type ChannelAccess = "public" | "members"
 type ClubRole = "owner" | "officer" | "member"
 type MembershipState = "public" | "admin" | "owner" | "officer" | "member" | "pending" | "notMember"
+const liveStatus = v.union(v.literal("open"), v.literal("closed"))
+const ticketCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 function normalizeChannelName(value: string) {
   return value.trim().replace(/\s+/g, " ")
@@ -25,6 +27,56 @@ function createChannelSlug(name: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48)
+}
+
+function normalizeOptionalString(value: string | undefined) {
+  const trimmed = value?.trim() ?? ""
+  return trimmed.length ? trimmed : undefined
+}
+
+function createOptionId(label: string, index: number) {
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 24)
+
+  return `${slug || "option"}-${index + 1}`
+}
+
+function normalizePollOptions(options: string[]) {
+  const normalized = options
+    .map((option) => option.trim())
+    .filter((option) => option.length > 0)
+
+  if (normalized.length < 2) {
+    throw new Error("Polls need at least two options.")
+  }
+
+  if (normalized.length > 6) {
+    throw new Error("Polls can have up to six options.")
+  }
+
+  const seen = new Set<string>()
+
+  normalized.forEach((option) => {
+    const key = option.toLowerCase()
+
+    if (seen.has(key)) {
+      throw new Error("Poll options must be unique.")
+    }
+
+    if (option.length > 60) {
+      throw new Error("Each poll option must be 60 characters or fewer.")
+    }
+
+    seen.add(key)
+  })
+
+  return normalized.map((label, index) => ({
+    id: createOptionId(label, index),
+    label,
+  }))
 }
 
 function fallbackNameForSlug(slug: string) {
@@ -295,6 +347,59 @@ async function listPendingJoinRequests(
 
   pending.sort((left, right) => left.createdAt - right.createdAt)
   return pending
+}
+
+async function requireClubEvent(
+  ctx: ReadCtx | MutationCtx,
+  eventId: Id<"clubEvents">
+): Promise<Doc<"clubEvents">> {
+  const event = await ctx.db.get(eventId)
+
+  if (!event) {
+    throw new Error("Club event not found.")
+  }
+
+  return event
+}
+
+async function requireClubPoll(
+  ctx: ReadCtx | MutationCtx,
+  pollId: Id<"clubPolls">
+): Promise<Doc<"clubPolls">> {
+  const poll = await ctx.db.get(pollId)
+
+  if (!poll) {
+    throw new Error("Club poll not found.")
+  }
+
+  return poll
+}
+
+async function generateUniqueTicketCode(
+  ctx: ReadCtx | MutationCtx,
+  workspaceId: Id<"workspaces">
+) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    let nextCode = "EV"
+
+    for (let index = 0; index < 6; index += 1) {
+      const randomIndex = Math.floor(Math.random() * ticketCodeAlphabet.length)
+      nextCode += ticketCodeAlphabet[randomIndex]
+    }
+
+    const existing = await ctx.db
+      .query("clubEventTickets")
+      .withIndex("by_workspace_and_code", (q) =>
+        q.eq("workspaceId", workspaceId).eq("code", nextCode)
+      )
+      .unique()
+
+    if (!existing) {
+      return nextCode
+    }
+  }
+
+  throw new Error("Unable to generate a unique event ticket right now.")
 }
 
 async function requireConversationManager(
@@ -582,6 +687,7 @@ export const listMessages = queryGeneric({
           body: message.body,
           createdAt: message.createdAt,
           author: {
+            id: String(message.authorId),
             name: author?.name ?? "Student member",
             imageUrl: author?.imageUrl ?? null,
             isCurrentUser: author?.externalId === identity.subject,
@@ -589,6 +695,628 @@ export const listMessages = queryGeneric({
         }
       })
     )
+  },
+})
+
+export const clubOperations = queryGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+  },
+  handler: async (ctx: ReadCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      return null
+    }
+
+    const { currentUser, role: workspaceRole } = await getWorkspaceViewer(ctx, workspace)
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      return null
+    }
+
+    const access = resolveConversationAccess(convo)
+    const membership = currentUser
+      ? await getConversationMembership(ctx, convo._id, currentUser._id)
+      : null
+    const viewerClubRole = membership
+      ? resolveConversationMemberRole(convo, membership)
+      : null
+    const canManage = canManageConversation({
+      workspaceRole,
+      clubRole: viewerClubRole,
+    })
+    const canParticipate = canAccessConversation({
+      access,
+      workspaceRole,
+      clubRole: viewerClubRole,
+    })
+    const events = await ctx.db
+      .query("clubEvents")
+      .withIndex("by_conversation_and_created_at", (q) =>
+        q.eq("conversationId", convo._id)
+      )
+      .collect()
+    const polls = await ctx.db
+      .query("clubPolls")
+      .withIndex("by_conversation_and_created_at", (q) =>
+        q.eq("conversationId", convo._id)
+      )
+      .collect()
+
+    const eventSnapshots = await Promise.all(
+      events.map(async (event) => {
+        const [createdByUser, tickets] = await Promise.all([
+          ctx.db.get(event.createdByUserId),
+          ctx.db
+            .query("clubEventTickets")
+            .withIndex("by_event_and_created_at", (q) => q.eq("eventId", event._id))
+            .collect(),
+        ])
+
+        const viewerTicket = currentUser
+          ? tickets.find((ticket) => ticket.userId === currentUser._id) ?? null
+          : null
+        const attendees = canManage
+          ? (
+              await Promise.all(
+                tickets.map(async (ticket) => {
+                  const [user, checkedInByUser] = await Promise.all([
+                    ctx.db.get(ticket.userId),
+                    ticket.checkedInByUserId
+                      ? ctx.db.get(ticket.checkedInByUserId)
+                      : Promise.resolve(null),
+                  ])
+
+                  return {
+                    ticketId: String(ticket._id),
+                    userId: String(ticket.userId),
+                    name: user?.name ?? "Student member",
+                    email: user?.email ?? null,
+                    code: ticket.code,
+                    createdAt: ticket.createdAt,
+                    checkedInAt: ticket.checkedInAt ?? null,
+                    checkedInByName: checkedInByUser?.name ?? null,
+                  }
+                })
+              )
+            ).sort((left, right) => {
+              const leftPending = left.checkedInAt === null
+              const rightPending = right.checkedInAt === null
+
+              if (leftPending !== rightPending) {
+                return leftPending ? -1 : 1
+              }
+
+              return left.name.localeCompare(right.name)
+            })
+          : []
+        const checkedInCount = tickets.filter((ticket) => ticket.checkedInAt).length
+
+        return {
+          id: String(event._id),
+          title: event.title,
+          summary: event.summary ?? null,
+          date: event.date,
+          time: event.time,
+          location: event.location,
+          status: event.status,
+          createdAt: event.createdAt,
+          createdByName: createdByUser?.name ?? "Club manager",
+          ticketCount: tickets.length,
+          checkedInCount,
+          viewerTicket: viewerTicket
+            ? {
+                id: String(viewerTicket._id),
+                code: viewerTicket.code,
+                createdAt: viewerTicket.createdAt,
+                checkedInAt: viewerTicket.checkedInAt ?? null,
+                attendeeName: currentUser?.name ?? "Student member",
+                attendeeEmail: currentUser?.email ?? null,
+                organizationName: workspace.name,
+                clubName: convo.name,
+                eventTitle: event.title,
+                eventDate: event.date,
+                eventTime: event.time,
+                eventLocation: event.location,
+                qrValue: JSON.stringify({
+                  type: "campushive-club-ticket",
+                  workspaceSlug: workspace.slug,
+                  clubSlug: convo.slug,
+                  eventId: String(event._id),
+                  ticketId: String(viewerTicket._id),
+                  code: viewerTicket.code,
+                }),
+              }
+            : null,
+          attendees,
+        }
+      })
+    )
+
+    eventSnapshots.sort((left, right) => {
+      if (left.status !== right.status) {
+        return left.status === "open" ? -1 : 1
+      }
+
+      if (left.date !== right.date) {
+        return left.date.localeCompare(right.date)
+      }
+
+      return left.time.localeCompare(right.time)
+    })
+
+    const pollSnapshots = await Promise.all(
+      polls.map(async (poll) => {
+        const [createdByUser, votes] = await Promise.all([
+          ctx.db.get(poll.createdByUserId),
+          ctx.db
+            .query("clubPollVotes")
+            .withIndex("by_poll", (q) => q.eq("pollId", poll._id))
+            .collect(),
+        ])
+
+        const voteCountByOptionId = new Map<string, number>()
+        let viewerVoteOptionId: string | null = null
+
+        votes.forEach((vote) => {
+          voteCountByOptionId.set(
+            vote.optionId,
+            (voteCountByOptionId.get(vote.optionId) ?? 0) + 1
+          )
+
+          if (currentUser && vote.userId === currentUser._id) {
+            viewerVoteOptionId = vote.optionId
+          }
+        })
+
+        const totalVotes = votes.length
+
+        return {
+          id: String(poll._id),
+          question: poll.question,
+          description: poll.description ?? null,
+          status: poll.status,
+          totalVotes,
+          createdAt: poll.createdAt,
+          createdByName: createdByUser?.name ?? "Club manager",
+          viewerVoteOptionId,
+          options: poll.options.map((option) => {
+            const votesForOption = voteCountByOptionId.get(option.id) ?? 0
+
+            return {
+              id: option.id,
+              label: option.label,
+              votes: votesForOption,
+              percentage:
+                totalVotes === 0 ? 0 : Math.round((votesForOption / totalVotes) * 100),
+            }
+          }),
+        }
+      })
+    )
+
+    pollSnapshots.sort((left, right) => {
+      if (left.status !== right.status) {
+        return left.status === "open" ? -1 : 1
+      }
+
+      return right.createdAt - left.createdAt
+    })
+
+    return {
+      canManage,
+      canParticipate,
+      clubName: convo.name,
+      workspaceName: workspace.name,
+      events: eventSnapshots,
+      polls: pollSnapshots,
+    }
+  },
+})
+
+export const createClubEvent = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    title: v.string(),
+    summary: v.optional(v.string()),
+    date: v.string(),
+    time: v.string(),
+    location: v.string(),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    const manager = await requireConversationManager(ctx, workspace, convo)
+    const title = normalizeChannelName(args.title)
+    const summary = normalizeOptionalString(args.summary)
+    const time = args.time.trim()
+    const location = args.location.trim()
+
+    if (title.length < 3) {
+      throw new Error("Event title must be at least 3 characters long.")
+    }
+
+    if (title.length > 90) {
+      throw new Error("Event title must be 90 characters or fewer.")
+    }
+
+    if (summary && summary.length > 240) {
+      throw new Error("Event summary must be 240 characters or fewer.")
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) {
+      throw new Error("Use a valid event date.")
+    }
+
+    if (time.length < 2 || time.length > 40) {
+      throw new Error("Event time must be between 2 and 40 characters.")
+    }
+
+    if (location.length < 2 || location.length > 80) {
+      throw new Error("Event location must be between 2 and 80 characters.")
+    }
+
+    const eventId = await ctx.db.insert("clubEvents", {
+      workspaceId: workspace._id,
+      conversationId: convo._id,
+      title,
+      summary,
+      date: args.date,
+      time,
+      location,
+      status: "open",
+      createdAt: Date.now(),
+      createdByUserId: manager.user._id,
+    })
+
+    return {
+      eventId: String(eventId),
+    }
+  },
+})
+
+export const joinClubEvent = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    eventId: v.id("clubEvents"),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    const { role: workspaceRole, user } = await syncCurrentWorkspaceMember(ctx, workspace)
+    const access = resolveConversationAccess(convo)
+    const membership = await getConversationMembership(ctx, convo._id, user._id)
+    const clubRole = membership ? resolveConversationMemberRole(convo, membership) : null
+
+    if (!canAccessConversation({ access, workspaceRole, clubRole })) {
+      throw new Error("Join this club space before claiming an event ticket.")
+    }
+
+    const event = await requireClubEvent(ctx, args.eventId)
+
+    if (event.workspaceId !== workspace._id || event.conversationId !== convo._id) {
+      throw new Error("This event does not belong to the selected club.")
+    }
+
+    if (event.status !== "open") {
+      throw new Error("This event is no longer issuing tickets.")
+    }
+
+    const existingTicket = await ctx.db
+      .query("clubEventTickets")
+      .withIndex("by_event_and_user", (q) =>
+        q.eq("eventId", event._id).eq("userId", user._id)
+      )
+      .unique()
+
+    if (existingTicket) {
+      return {
+        ticketId: String(existingTicket._id),
+        code: existingTicket.code,
+      }
+    }
+
+    const code = await generateUniqueTicketCode(ctx, workspace._id)
+    const ticketId = await ctx.db.insert("clubEventTickets", {
+      workspaceId: workspace._id,
+      conversationId: convo._id,
+      eventId: event._id,
+      userId: user._id,
+      code,
+      createdAt: Date.now(),
+    })
+
+    return {
+      ticketId: String(ticketId),
+      code,
+    }
+  },
+})
+
+export const checkInClubTicket = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    ticketId: v.id("clubEventTickets"),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    const manager = await requireConversationManager(ctx, workspace, convo)
+    const ticket = await ctx.db.get(args.ticketId)
+
+    if (!ticket) {
+      throw new Error("Event ticket not found.")
+    }
+
+    if (ticket.workspaceId !== workspace._id || ticket.conversationId !== convo._id) {
+      throw new Error("This ticket does not belong to the selected club.")
+    }
+
+    if (ticket.checkedInAt) {
+      throw new Error("This ticket has already been checked in.")
+    }
+
+    await ctx.db.patch(ticket._id, {
+      checkedInAt: Date.now(),
+      checkedInByUserId: manager.user._id,
+    })
+
+    return null
+  },
+})
+
+export const resetClubTicket = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    ticketId: v.id("clubEventTickets"),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    await requireConversationManager(ctx, workspace, convo)
+    const ticket = await ctx.db.get(args.ticketId)
+
+    if (!ticket) {
+      throw new Error("Event ticket not found.")
+    }
+
+    if (ticket.workspaceId !== workspace._id || ticket.conversationId !== convo._id) {
+      throw new Error("This ticket does not belong to the selected club.")
+    }
+
+    await ctx.db.patch(ticket._id, {
+      checkedInAt: undefined,
+      checkedInByUserId: undefined,
+    })
+
+    return null
+  },
+})
+
+export const createClubPoll = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    question: v.string(),
+    description: v.optional(v.string()),
+    options: v.array(v.string()),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    const manager = await requireConversationManager(ctx, workspace, convo)
+    const question = normalizeChannelName(args.question)
+    const description = normalizeOptionalString(args.description)
+    const options = normalizePollOptions(args.options)
+
+    if (question.length < 5) {
+      throw new Error("Poll question must be at least 5 characters long.")
+    }
+
+    if (question.length > 140) {
+      throw new Error("Poll question must be 140 characters or fewer.")
+    }
+
+    if (description && description.length > 240) {
+      throw new Error("Poll description must be 240 characters or fewer.")
+    }
+
+    const pollId = await ctx.db.insert("clubPolls", {
+      workspaceId: workspace._id,
+      conversationId: convo._id,
+      question,
+      description,
+      status: "open",
+      options,
+      createdAt: Date.now(),
+      createdByUserId: manager.user._id,
+    })
+
+    return {
+      pollId: String(pollId),
+    }
+  },
+})
+
+export const voteOnClubPoll = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    pollId: v.id("clubPolls"),
+    optionId: v.string(),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    const { role: workspaceRole, user } = await syncCurrentWorkspaceMember(ctx, workspace)
+    const access = resolveConversationAccess(convo)
+    const membership = await getConversationMembership(ctx, convo._id, user._id)
+    const clubRole = membership ? resolveConversationMemberRole(convo, membership) : null
+
+    if (!canAccessConversation({ access, workspaceRole, clubRole })) {
+      throw new Error("Join this club space before voting in club polls.")
+    }
+
+    const poll = await requireClubPoll(ctx, args.pollId)
+
+    if (poll.workspaceId !== workspace._id || poll.conversationId !== convo._id) {
+      throw new Error("This poll does not belong to the selected club.")
+    }
+
+    if (poll.status !== "open") {
+      throw new Error("This poll is already closed.")
+    }
+
+    if (!poll.options.some((option) => option.id === args.optionId)) {
+      throw new Error("Pick one of the available poll options.")
+    }
+
+    const existingVote = await ctx.db
+      .query("clubPollVotes")
+      .withIndex("by_poll_and_user", (q) =>
+        q.eq("pollId", poll._id).eq("userId", user._id)
+      )
+      .unique()
+
+    const now = Date.now()
+
+    if (existingVote) {
+      await ctx.db.patch(existingVote._id, {
+        optionId: args.optionId,
+        updatedAt: now,
+      })
+      return null
+    }
+
+    await ctx.db.insert("clubPollVotes", {
+      workspaceId: workspace._id,
+      conversationId: convo._id,
+      pollId: poll._id,
+      userId: user._id,
+      optionId: args.optionId,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    return null
+  },
+})
+
+export const setClubPollStatus = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    pollId: v.id("clubPolls"),
+    status: liveStatus,
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    await requireConversationManager(ctx, workspace, convo)
+    const poll = await requireClubPoll(ctx, args.pollId)
+
+    if (poll.workspaceId !== workspace._id || poll.conversationId !== convo._id) {
+      throw new Error("This poll does not belong to the selected club.")
+    }
+
+    await ctx.db.patch(poll._id, {
+      status: args.status,
+    })
+
+    return null
   },
 })
 

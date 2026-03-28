@@ -47,6 +47,8 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
       slug: organization.slug ?? workspaceSlug,
       name: organization.name,
       userName: user.fullName ?? user.username ?? undefined,
+      userFirstName: user.firstName ?? undefined,
+      userLastName: user.lastName ?? undefined,
       userEmail: user.primaryEmailAddress?.emailAddress,
       userImageUrl: user.imageUrl,
     })
@@ -82,6 +84,8 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
     organization?.name,
     user?.id,
     user?.fullName,
+    user?.firstName,
+    user?.lastName,
     user?.username,
     user?.primaryEmailAddress?.emailAddress,
     user?.imageUrl,

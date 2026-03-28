@@ -22,11 +22,15 @@ const taskStatus = v.union(
   v.literal("done"),
   v.literal("flagged")
 )
+const eventStatus = v.union(v.literal("open"), v.literal("closed"))
+const pollStatus = v.union(v.literal("open"), v.literal("closed"))
 
 export default defineSchema({
   users: defineTable({
     externalId: v.string(),
     name: v.string(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     email: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
     tokenIdentifier: v.optional(v.string()),
@@ -156,6 +160,104 @@ export default defineSchema({
     location: v.string(),
     order: v.number(),
   }).index("by_workspace_and_day_order", ["workspaceId", "dayKey", "order"]),
+
+  clubEvents: defineTable({
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    title: v.string(),
+    summary: v.optional(v.string()),
+    date: v.string(),
+    time: v.string(),
+    location: v.string(),
+    status: eventStatus,
+    createdAt: v.number(),
+    createdByUserId: v.id("users"),
+  })
+    .index("by_conversation_and_created_at", ["conversationId", "createdAt"])
+    .index("by_workspace_and_created_at", ["workspaceId", "createdAt"]),
+
+  clubEventTickets: defineTable({
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    eventId: v.id("clubEvents"),
+    userId: v.id("users"),
+    code: v.string(),
+    createdAt: v.number(),
+    checkedInAt: v.optional(v.number()),
+    checkedInByUserId: v.optional(v.id("users")),
+  })
+    .index("by_event_and_user", ["eventId", "userId"])
+    .index("by_event_and_created_at", ["eventId", "createdAt"])
+    .index("by_workspace_and_code", ["workspaceId", "code"])
+    .index("by_user_and_created_at", ["userId", "createdAt"]),
+
+  gatePasses: defineTable({
+    workspaceId: v.id("workspaces"),
+    code: v.string(),
+    attendeeName: v.string(),
+    attendeeEmail: v.optional(v.string()),
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+    createdByUserId: v.id("users"),
+    checkedInAt: v.optional(v.number()),
+    checkedInByUserId: v.optional(v.id("users")),
+  })
+    .index("by_workspace_and_created_at", ["workspaceId", "createdAt"])
+    .index("by_workspace_and_code", ["workspaceId", "code"]),
+
+  polls: defineTable({
+    workspaceId: v.id("workspaces"),
+    question: v.string(),
+    description: v.optional(v.string()),
+    status: pollStatus,
+    options: v.array(
+      v.object({
+        id: v.string(),
+        label: v.string(),
+      })
+    ),
+    createdAt: v.number(),
+    createdByUserId: v.id("users"),
+  }).index("by_workspace_and_created_at", ["workspaceId", "createdAt"]),
+
+  clubPolls: defineTable({
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    question: v.string(),
+    description: v.optional(v.string()),
+    status: pollStatus,
+    options: v.array(
+      v.object({
+        id: v.string(),
+        label: v.string(),
+      })
+    ),
+    createdAt: v.number(),
+    createdByUserId: v.id("users"),
+  }).index("by_conversation_and_created_at", ["conversationId", "createdAt"]),
+
+  clubPollVotes: defineTable({
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    pollId: v.id("clubPolls"),
+    userId: v.id("users"),
+    optionId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_poll_and_user", ["pollId", "userId"])
+    .index("by_poll", ["pollId"]),
+
+  pollVotes: defineTable({
+    workspaceId: v.id("workspaces"),
+    pollId: v.id("polls"),
+    userId: v.id("users"),
+    optionId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_poll_and_user", ["pollId", "userId"])
+    .index("by_poll", ["pollId"]),
 
   whiteboardSessions: defineTable({
     workspaceId: v.id("workspaces"),

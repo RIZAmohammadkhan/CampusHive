@@ -9,10 +9,11 @@ This refactor keeps the existing working Clerk + Convex foundation, but reshapes
 - Campus-scoped auth and routing with Clerk Organizations
 - A Campus Hub dashboard at `/w/[workspaceSlug]`
 - Club spaces with realtime Convex-backed chat
+- Club-native event tickets with QR generation and attendee check-in
 - An Event Ops board with assignees and live task status updates
 - A shared events calendar with admin event creation
 - A resources library for playbooks, notes, and reusable context
-- A Gate & Polls control-room surface built around live presence and next-step modules
+- A Gate & Polls control room with live pass issuance, desk check-in, and realtime voting
 
 ## Current Stack
 
@@ -109,7 +110,7 @@ Open `http://localhost:3000`.
 - Task board = event operations
 - Calendar = events and meetings
 - Docs = resources and reusable context
-- Whiteboard route = gate passes, polls, and notification control room
+- Whiteboard route = gate passes and live campus polls
 
 ## Scripts
 
@@ -139,6 +140,7 @@ npm run convex:deploy
 - `convex/projects.ts`: event task board logic
 - `convex/events.ts`: events calendar queries and mutation
 - `convex/resources.ts`: resources library queries and mutation
+- `convex/whiteboard.ts`: gate pass issuance, check-in, and poll logic
 
 ## Current Status
 
@@ -147,16 +149,17 @@ Implemented now:
 - Campus-focused branding and design system
 - Campus Hub shell and navigation
 - Club spaces with realtime chat
+- Club event creation, QR ticket claiming, and attendee check-in inside each club
 - Event task creation, assignment, and live status changes
 - Shared event creation and grouped calendar view
 - Resource creation and library view
-- Control-room style surface for passes, polls, and notifications
+- Clickable member profiles with organization, club memberships, and recent tickets
+- Gate pass issuance, code-based check-in, and live poll creation/results
 
 Not wired yet:
 
 - Actual join-request flows for clubs
-- QR code generation and scanning
-- Poll persistence and live vote results
+- Camera-based QR generation and scanning
 - Automatic virtual room creation
 - Fine-grained manager/officer permission layers beyond current admin/member roles
 

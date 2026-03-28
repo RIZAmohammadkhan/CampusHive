@@ -15,6 +15,7 @@ import { toast } from "sonner"
 
 import { PresenceDot } from "@/components/app/presence-dot"
 import { LiveLoadingState } from "@/components/app/live-loading-state"
+import { MemberProfileSheet } from "@/components/app/member-profile-sheet"
 import { ConvexAuthGate } from "@/components/convex/convex-auth-gate"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
@@ -85,6 +86,7 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   const requestToJoin = useMutation(convexApi.chat.requestToJoin)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
   const [pendingJoinSlug, setPendingJoinSlug] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -303,6 +305,9 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
               <h3 className="mt-2 text-[20px] font-medium text-cream">
                 Student directory
               </h3>
+              <p className="mt-2 text-[12px] leading-6 text-tan">
+                Click a member to open their full campus profile.
+              </p>
             </div>
             <span className="do-pill">
               <Users2Icon className="size-3.5" />
@@ -313,7 +318,12 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
           <div className="mt-5 space-y-3">
             {directoryData.members.length ? (
               directoryData.members.map((member) => (
-                <div key={member.id} className="do-card p-4">
+                <button
+                  key={member.id}
+                  type="button"
+                  className="do-card w-full p-4 text-left"
+                  onClick={() => setSelectedMemberId(member.id)}
+                >
                   <div className="flex items-center gap-3">
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[12px] text-cream">
                       {member.name.charAt(0)}
@@ -332,7 +342,7 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                       className="size-2.5"
                     />
                   </div>
-                </div>
+                </button>
               ))
             ) : (
               <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan">
@@ -342,6 +352,13 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
           </div>
         </section>
       </aside>
+
+      <MemberProfileSheet
+        workspaceSlug={workspaceSlug}
+        userId={selectedMemberId}
+        open={selectedMemberId !== null}
+        onClose={() => setSelectedMemberId(null)}
+      />
     </div>
   )
 }
