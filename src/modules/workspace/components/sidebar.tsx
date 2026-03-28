@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { useOrganization, useUser } from "@clerk/nextjs"
+import { useOrganization } from "@clerk/nextjs"
 import { useConvexAuth, useQuery } from "convex/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -9,7 +9,7 @@ import { usePathname } from "next/navigation"
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { cn } from "@/lib/utils"
 import { workspacePath } from "@/lib/workspaces"
-import { channelsApi } from "@/modules/channels/api"
+import { channelsApi, type ChannelListData } from "@/modules/channels/api"
 import { PresenceDot } from "@/modules/presence/components/presence-dot"
 import { workspaceApi } from "@/modules/workspace/api"
 import { workspaceSections } from "@/modules/workspace/sections"
@@ -70,61 +70,37 @@ type AppSidebarProps = {
   workspaceSlug: string
 }
 
-function sidebarChannelMeta(
-  membershipState:
-    | "public"
-    | "admin"
-    | "owner"
-    | "officer"
-    | "member"
-    | "pending"
-    | "notMember"
-) {
-  if (membershipState === "public") return "open"
-  if (membershipState === "admin") return "admin"
-  if (membershipState === "owner") return "owner"
-  if (membershipState === "officer") return "officer"
-  if (membershipState === "member") return "joined"
-  if (membershipState === "pending") return "pending"
+function sidebarChannelMeta(channel: ChannelListData["channels"][number]) {
+  if (channel.viewerClubRole === "owner") return "owner"
+  if (channel.viewerClubRole === "officer") return "officer"
+  if (channel.viewerClubRole === "member") return "joined"
+  if (channel.membershipState === "pending") return "pending"
+  if (channel.membershipState === "admin") return "admin"
+  if (channel.membershipState === "public") return "open"
   return "join"
-}
-
-function normalizeOptionalString(value: string | null | undefined) {
-  const normalized = value?.trim()
-  return normalized ? normalized : undefined
 }
 
 export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
   const enabled = useConvexConfigured()
   const { isAuthenticated } = useConvexAuth()
   const { organization } = useOrganization()
-  const { user } = useUser()
   const queryArgs = enabled && isAuthenticated ? { workspaceSlug } : "skip"
   const channelsData = useQuery(channelsApi.listChannels, queryArgs)
   const directoryData = useQuery(workspaceApi.directory, queryArgs)
   const workspaceName = organization?.name ?? workspaceSlug
   const workspaceInitial = workspaceName.charAt(0).toUpperCase()
-  const clerkDisplayName =
-    normalizeOptionalString(user?.fullName) ??
-    normalizeOptionalString(user?.firstName) ??
-    normalizeOptionalString(user?.username)
-  const currentMember = directoryData?.members.find((member) => member.isCurrentUser)
-  const currentUserName =
-    normalizeOptionalString(currentMember?.name) &&
-    currentMember?.name !== "Student member"
-      ? currentMember.name
-      : clerkDisplayName ?? "You"
   const roleLabel =
     directoryData?.currentRole === "admin" ? "College admin" : "Student member"
-  const visibleMembers =
-    directoryData?.members.slice(0, 6).map((member) => ({
-      ...member,
-      displayName:
-        member.isCurrentUser &&
-        (!normalizeOptionalString(member.name) || member.name === "Student member")
-          ? clerkDisplayName ?? member.name
-          : member.name,
-    })) ?? []
+  const memberClubs =
+    channelsData?.channels.filter((channel) => !channel.isGeneral && channel.viewerClubRole) ??
+    []
+  const pendingClubs =
+    channelsData?.channels.filter(
+      (channel) =>
+        !channel.isGeneral &&
+        channel.viewerClubRole === null &&
+        channel.membershipState === "pending"
+    ) ?? []
 
   return (
     <aside className="w-full shrink-0 border-b border-hairline/80 bg-panel/55 backdrop-blur-xl lg:w-[280px] lg:border-r lg:border-b-0">
@@ -138,7 +114,6 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
               <div className="truncate text-[16px] font-medium leading-none text-cream">
                 {workspaceName}
               </div>
-              <div className="truncate text-[13px] text-tan">{currentUserName}</div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="do-pill">{roleLabel}</span>
               </div>
@@ -162,19 +137,26 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
         <div className="grid gap-4">
           <div className="do-panel p-4">
             <div className="flex items-center justify-between">
-              <div className="do-eyebrow">Clubs</div>
+              <div className="do-eyebrow">Your clubs</div>
               <span className="text-[10px] tracking-[0.14em] text-tan uppercase">
-                {channelsData?.channels.length ?? 0} live
+                {memberClubs.length} joined
               </span>
             </div>
             <div className="mt-3 space-y-2">
-              {channelsData?.channels.length ? (
-                channelsData.channels.slice(0, 6).map((channel) => (
+              <SidebarLink
+                href={workspacePath(workspaceSlug, "/channels")}
+                match="prefix"
+                meta={`${(channelsData?.channels.filter((channel) => !channel.isGeneral).length ?? 0).toString()} clubs`}
+              >
+                <span>Browse club directory</span>
+              </SidebarLink>
+              {memberClubs.length ? (
+                memberClubs.slice(0, 5).map((channel) => (
                   <SidebarLink
                     key={channel.id}
                     href={workspacePath(workspaceSlug, `/channels/${channel.slug}`)}
                     match="prefix"
-                    meta={sidebarChannelMeta(channel.membershipState)}
+                    meta={sidebarChannelMeta(channel)}
                   >
                     <span className="truncate">
                       <span className="text-tan/70">#</span> {channel.slug}
@@ -182,10 +164,17 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
                   </SidebarLink>
                 ))
               ) : (
-                <div className="rounded-[16px] border border-dashed border-hairline bg-surface/55 p-4 text-[13px] text-tan">
-                  No clubs yet.
+                <div className="rounded-[16px] border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan">
+                  {roleLabel === "College admin"
+                    ? "Create or join a club to pin it here."
+                    : "Join a club to keep it in easy reach."}
                 </div>
               )}
+              {pendingClubs.length ? (
+                <div className="rounded-[16px] border border-hairline bg-surface/55 px-3 py-3 text-[12px] text-tan">
+                  Pending: {pendingClubs.map((channel) => channel.name).join(", ")}
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -198,17 +187,17 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
             </div>
             <div className="mt-3 space-y-2">
               {directoryData?.members.length ? (
-                visibleMembers.map((member) => (
+                directoryData.members.slice(0, 6).map((member) => (
                   <div
                     key={member.id}
                     className="flex items-center gap-3 rounded-2xl border border-hairline bg-surface/55 px-3 py-3"
                   >
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[12px] text-cream">
-                      {member.displayName.charAt(0)}
+                      {member.name.charAt(0)}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-medium text-cream">
-                        {member.displayName}
+                        {member.name}
                       </span>
                       <span className="block text-[11px] leading-6 text-tan">
                         {member.role === "admin" ? "College admin" : "Student member"}

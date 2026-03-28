@@ -13,8 +13,6 @@ This refactor keeps the existing Clerk + Convex foundation, but reshapes the pro
 - Club-native event tickets with QR generation and attendee check-in
 - An Event Ops board with assignees and live task status updates
 - A shared events calendar with admin event creation
-- A resources library for playbooks, notes, and reusable context
-- A Gate & Polls control room with live pass issuance, desk check-in, and realtime voting
 
 ## Current Stack
 
@@ -101,8 +99,6 @@ Open `http://localhost:3000`.
 - `/w/[workspaceSlug]/channels/[...slug]`
 - `/w/[workspaceSlug]/projects`
 - `/w/[workspaceSlug]/calendar`
-- `/w/[workspaceSlug]/docs`
-- `/w/[workspaceSlug]/whiteboard`
 
 ## Module Layout
 
@@ -113,8 +109,6 @@ The app is now organized under `src/modules` so teams can work mostly inside a s
 - `src/modules/channels`: club discovery, channel detail, club tickets, and chat Convex contract
 - `src/modules/projects`: Event Ops board and task mutations
 - `src/modules/events`: calendar page and event creation
-- `src/modules/resources`: resource library page and resource mutations
-- `src/modules/whiteboard`: gate control room and polling flows
 - `src/modules/presence`: presence API and presence UI primitives
 - `src/modules/shared`: cross-module UI primitives like loading states
 - `src/lib/convex-api.ts`: compatibility barrel that now re-exports module-owned APIs instead of defining everything in one file
@@ -131,8 +125,6 @@ This means parallel work usually stays inside one module:
 - Channel = club space
 - Task board = event operations
 - Calendar = events and meetings
-- Docs = resources and reusable context
-- Whiteboard route = gate passes and live campus polls
 
 ## Scripts
 
@@ -157,15 +149,11 @@ npm run convex:deploy
 - `src/modules/channels/components/live-channel-page.tsx`: club detail, messages, tickets, and polls
 - `src/modules/projects/components/live-projects-page.tsx`: Event Ops board
 - `src/modules/events/components/live-calendar-page.tsx`: shared events calendar
-- `src/modules/resources/components/live-docs-page.tsx`: resources library
-- `src/modules/whiteboard/components/live-whiteboard-page.tsx`: gate and polling control room
 - `src/lib/convex-api.ts`: compatibility barrel over module-owned Convex contracts
 - `convex/workspaces.ts`: campus bootstrap and directory sync
 - `convex/chat.ts`: club-space conversations
 - `convex/projects.ts`: event task board logic
 - `convex/events.ts`: events calendar queries and mutation
-- `convex/resources.ts`: resources library queries and mutation
-- `convex/whiteboard.ts`: gate pass issuance, check-in, and poll logic
 
 ## Current Status
 
@@ -178,9 +166,7 @@ Implemented now:
 - Club event creation, QR ticket claiming, and attendee check-in inside each club
 - Event task creation, assignment, and live status changes
 - Shared event creation and grouped calendar view
-- Resource creation and library view
 - Clickable member profiles with organization, club memberships, and recent tickets
-- Gate pass issuance, code-based check-in, and live poll creation/results
 
 Not wired yet:
 

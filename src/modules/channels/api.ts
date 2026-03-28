@@ -51,6 +51,14 @@ export type ConversationData = {
   canJoin: boolean
   canRequestToJoin: boolean
   canLeave: boolean
+  discussionSections: Array<{
+    id: string | null
+    slug: string
+    name: string
+    description: string | null
+    messageCount: number
+    lastMessageAt: number | null
+  }>
   members: Array<{
     id: string
     name: string
@@ -148,9 +156,10 @@ export const channelsApi = {
     { workspaceSlug: string; slug: string },
     ConversationData | null
   >("chat:conversation"),
-  listMessages: queryRef<{ workspaceSlug: string; slug: string }, MessageData[]>(
-    "chat:listMessages"
-  ),
+  listMessages: queryRef<
+    { workspaceSlug: string; slug: string; sectionSlug?: string },
+    MessageData[]
+  >("chat:listMessages"),
   clubOperations: queryRef<
     { workspaceSlug: string; slug: string },
     ClubOperationsData | null
@@ -165,6 +174,15 @@ export const channelsApi = {
     },
     { channelId: string; slug: string }
   >("chat:createChannel"),
+  createDiscussionSection: mutationRef<
+    {
+      workspaceSlug: string
+      slug: string
+      name: string
+      description?: string
+    },
+    { sectionId: string; slug: string }
+  >("chat:createDiscussionSection"),
   joinOpenClub: mutationRef<{ workspaceSlug: string; slug: string }, null>(
     "chat:joinOpenClub"
   ),
@@ -261,7 +279,7 @@ export const channelsApi = {
     null
   >("chat:setMemberRole"),
   sendMessage: mutationRef<
-    { workspaceSlug: string; slug: string; body: string },
+    { workspaceSlug: string; slug: string; sectionSlug?: string; body: string },
     null
   >("chat:sendMessage"),
 }

@@ -1,18 +1,20 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { type FormEvent, type ReactNode, useDeferredValue, useState, useTransition } from "react"
 import Link from "next/link"
 import {
   ArrowLeftIcon,
   CalendarDaysIcon,
-  CheckIcon,
   CheckCircle2Icon,
+  CheckIcon,
   ClipboardListIcon,
   Clock3Icon,
+  HashIcon,
   LockKeyholeIcon,
   MapPinIcon,
   MessageSquareTextIcon,
   PlusIcon,
+  SearchIcon,
   SendHorizonalIcon,
   ShieldCheckIcon,
   TicketIcon,
@@ -21,6 +23,7 @@ import {
   XIcon,
 } from "lucide-react"
 import { useMutation, useQuery } from "convex/react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { ConvexAuthGate } from "@/components/convex/convex-auth-gate"
@@ -31,7 +34,7 @@ import { buttonVariants } from "@/components/ui/button-variants"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { workspacePath } from "@/lib/workspaces"
-import { channelsApi } from "@/modules/channels/api"
+import { channelsApi, type MessageData } from "@/modules/channels/api"
 import { TicketQr } from "@/modules/channels/components/ticket-qr"
 import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 import { MemberProfileSheet } from "@/modules/workspace/components/member-profile-sheet"
@@ -40,6 +43,8 @@ const selectClassName =
   "h-10 rounded-2xl border border-hairline bg-field/90 px-3 text-[13px] text-parchment outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/30"
 const textareaClassName =
   "min-h-28 w-full rounded-2xl border border-hairline bg-field/90 px-3 py-3 text-[13px] leading-6 text-parchment outline-none transition-colors duration-150 ease-out placeholder:text-tan focus:border-ring focus:ring-3 focus:ring-ring/30"
+const composerClassName =
+  "min-h-24 w-full rounded-[22px] border border-hairline bg-field/90 px-4 py-3 text-[14px] leading-6 text-parchment outline-none transition-colors placeholder:text-tan focus:border-ring focus:ring-3 focus:ring-ring/30"
 
 function formatMessageTime(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
@@ -55,12 +60,38 @@ function formatShortDate(timestamp: number) {
   }).format(new Date(timestamp))
 }
 
+function formatTimelineDate(timestamp: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(timestamp))
+}
+
 function formatEventDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     weekday: "short",
   }).format(new Date(`${date}T12:00:00`))
+}
+
+function formatRelativeActivity(timestamp: number | null) {
+  if (!timestamp) {
+    return "No activity yet"
+  }
+
+  const diffMinutes = Math.max(1, Math.round((Date.now() - timestamp) / 60_000))
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes} min ago`
+  }
+
+  if (diffMinutes < 1_440) {
+    return `${Math.round(diffMinutes / 60)} hr ago`
+  }
+
+  return `${Math.round(diffMinutes / 1_440)} day ago`
 }
 
 function membershipLabel(
@@ -88,12 +119,135 @@ function clubRoleLabel(role: "owner" | "officer" | "member") {
   return "Member"
 }
 
+function clubInitials(name: string) {
+  const words = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+
+  if (words.length === 0) {
+    return "CL"
+  }
+
+  return words.map((word) => word.charAt(0).toUpperCase()).join("")
+}
+
+function sameDay(left: number, right: number) {
+  const leftDate = new Date(left)
+  const rightDate = new Date(right)
+
+  return (
+    leftDate.getFullYear() === rightDate.getFullYear() &&
+    leftDate.getMonth() === rightDate.getMonth() &&
+    leftDate.getDate() === rightDate.getDate()
+  )
+}
+
+type TimelineItem =
+  | {
+      type: "divider"
+      key: string
+      label: string
+    }
+  | {
+      type: "group"
+      key: string
+      author: MessageData["author"]
+      createdAt: number
+      entries: MessageData[]
+    }
+
+function buildMessageTimeline(messages: MessageData[]): TimelineItem[] {
+  const items: TimelineItem[] = []
+  let currentGroup: TimelineItem | null = null
+  let lastDayKey: string | null = null
+
+  for (const entry of messages) {
+    const dayKey = new Date(entry.createdAt).toDateString()
+
+    if (dayKey !== lastDayKey) {
+      items.push({
+        type: "divider",
+        key: `day-${dayKey}`,
+        label: formatTimelineDate(entry.createdAt),
+      })
+      lastDayKey = dayKey
+      currentGroup = null
+    }
+
+    const previousEntry =
+      currentGroup?.type === "group"
+        ? currentGroup.entries[currentGroup.entries.length - 1]
+        : null
+    const withinFiveMinutes =
+      previousEntry !== null &&
+      entry.createdAt - previousEntry.createdAt < 5 * 60_000
+
+    if (
+      currentGroup?.type === "group" &&
+      currentGroup.author.id === entry.author.id &&
+      sameDay(currentGroup.createdAt, entry.createdAt) &&
+      withinFiveMinutes
+    ) {
+      currentGroup.entries.push(entry)
+      continue
+    }
+
+    currentGroup = {
+      type: "group",
+      key: entry.id,
+      author: entry.author,
+      createdAt: entry.createdAt,
+      entries: [entry],
+    }
+    items.push(currentGroup)
+  }
+
+  return items
+}
+
+function sectionHref(
+  workspaceSlug: string,
+  clubSlug: string,
+  sectionSlug?: string
+) {
+  return sectionSlug
+    ? workspacePath(workspaceSlug, `/channels/${clubSlug}/${sectionSlug}`)
+    : workspacePath(workspaceSlug, `/channels/${clubSlug}`)
+}
+
+type ActionButtonProps = {
+  label: string
+  icon?: ReactNode
+  disabled?: boolean
+  onClick: () => void
+  variant?: "default" | "outline"
+}
+
+function ActionButton({
+  label,
+  icon,
+  disabled,
+  onClick,
+  variant = "default",
+}: ActionButtonProps) {
+  return (
+    <Button variant={variant} disabled={disabled} onClick={onClick}>
+      {icon}
+      {label}
+    </Button>
+  )
+}
+
 export function LiveChannelPage({
   workspaceSlug,
-  slug,
+  clubSlug,
+  sectionSlug,
 }: {
   workspaceSlug: string
-  slug: string
+  clubSlug: string
+  sectionSlug?: string
 }) {
   const enabled = useConvexConfigured()
 
@@ -108,31 +262,40 @@ export function LiveChannelPage({
 
   return (
     <ConvexAuthGate>
-      <LiveChannelPageInner workspaceSlug={workspaceSlug} slug={slug} />
+      <LiveChannelPageInner
+        workspaceSlug={workspaceSlug}
+        clubSlug={clubSlug}
+        sectionSlug={sectionSlug}
+      />
     </ConvexAuthGate>
   )
 }
 
 function LiveChannelPageInner({
   workspaceSlug,
-  slug,
+  clubSlug,
+  sectionSlug,
 }: {
   workspaceSlug: string
-  slug: string
+  clubSlug: string
+  sectionSlug?: string
 }) {
+  const router = useRouter()
   const conversation = useQuery(channelsApi.conversation, {
     workspaceSlug,
-    slug,
+    slug: clubSlug,
   })
   const messages = useQuery(channelsApi.listMessages, {
     workspaceSlug,
-    slug,
+    slug: clubSlug,
+    sectionSlug,
   })
   const clubOps = useQuery(channelsApi.clubOperations, {
     workspaceSlug,
-    slug,
+    slug: clubSlug,
   })
   const sendMessage = useMutation(channelsApi.sendMessage)
+  const createDiscussionSection = useMutation(channelsApi.createDiscussionSection)
   const joinOpenClub = useMutation(channelsApi.joinOpenClub)
   const requestToJoin = useMutation(channelsApi.requestToJoin)
   const reviewJoinRequest = useMutation(channelsApi.reviewJoinRequest)
@@ -147,17 +310,22 @@ function LiveChannelPageInner({
   const voteOnClubPoll = useMutation(channelsApi.voteOnClubPoll)
   const setClubPollStatus = useMutation(channelsApi.setClubPollStatus)
   const [message, setMessage] = useState("")
+  const [sectionName, setSectionName] = useState("")
+  const [sectionDescription, setSectionDescription] = useState("")
+  const [showSectionComposer, setShowSectionComposer] = useState(false)
   const [eventTitle, setEventTitle] = useState("")
   const [eventSummary, setEventSummary] = useState("")
   const [eventDate, setEventDate] = useState("")
   const [eventTime, setEventTime] = useState("")
   const [eventLocation, setEventLocation] = useState("")
+  const [memberSearch, setMemberSearch] = useState("")
   const [pollQuestion, setPollQuestion] = useState("")
   const [pollDescription, setPollDescription] = useState("")
   const [pollOptions, setPollOptions] = useState("")
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const deferredMemberSearch = useDeferredValue(memberSearch.trim().toLowerCase())
 
   if (
     conversation === undefined ||
@@ -167,7 +335,7 @@ function LiveChannelPageInner({
     return (
       <LiveLoadingState
         title="Loading club"
-        body="Syncing messages and club activity."
+        body="Syncing messages, sections, and club activity."
       />
     )
   }
@@ -199,6 +367,24 @@ function LiveChannelPageInner({
   const memberCount = conversation.memberCount ?? null
   const members = conversation.members ?? []
   const pendingRequests = conversation.pendingRequests ?? []
+  const discussionSections = conversation.discussionSections ?? []
+  const selectedSection =
+    discussionSections.find((section) => section.slug === sectionSlug) ??
+    discussionSections.find((section) =>
+      conversation.isGeneral ? section.slug === "feed" : section.slug === "general"
+    ) ??
+    discussionSections[0] ??
+    null
+  const filteredMembers = members.filter((member) => {
+    if (!deferredMemberSearch) {
+      return true
+    }
+
+    return `${member.name} ${member.role}`
+      .toLowerCase()
+      .includes(deferredMemberSearch)
+  })
+  const timeline = buildMessageTimeline(messages)
 
   const runAction = (
     key: string,
@@ -221,11 +407,11 @@ function LiveChannelPageInner({
     })
   }
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const trimmed = message.trim()
 
-    if (!trimmed) {
+    if (!trimmed || !selectedSection) {
       return
     }
 
@@ -234,7 +420,8 @@ function LiveChannelPageInner({
       async () => {
         await sendMessage({
           workspaceSlug,
-          slug,
+          slug: clubSlug,
+          sectionSlug: selectedSection.slug,
           body: trimmed,
         })
       },
@@ -243,7 +430,31 @@ function LiveChannelPageInner({
     )
   }
 
-  const handleCreateEvent = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleCreateSection = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    runAction(
+      "create-section",
+      async () => {
+        const result = await createDiscussionSection({
+          workspaceSlug,
+          slug: clubSlug,
+          name: sectionName.trim(),
+          description: sectionDescription.trim() || undefined,
+        })
+
+        router.push(sectionHref(workspaceSlug, clubSlug, result.slug))
+      },
+      "Discussion section created",
+      () => {
+        setSectionName("")
+        setSectionDescription("")
+        setShowSectionComposer(false)
+      }
+    )
+  }
+
+  const handleCreateEvent = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     runAction(
@@ -251,7 +462,7 @@ function LiveChannelPageInner({
       async () => {
         await createClubEvent({
           workspaceSlug,
-          slug,
+          slug: clubSlug,
           title: eventTitle.trim(),
           summary: eventSummary.trim() || undefined,
           date: eventDate,
@@ -270,7 +481,7 @@ function LiveChannelPageInner({
     )
   }
 
-  const handleCreatePoll = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleCreatePoll = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     const options = pollOptions
@@ -288,7 +499,7 @@ function LiveChannelPageInner({
       async () => {
         await createClubPoll({
           workspaceSlug,
-          slug,
+          slug: clubSlug,
           question: pollQuestion.trim(),
           description: pollDescription.trim() || undefined,
           options,
@@ -304,639 +515,886 @@ function LiveChannelPageInner({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
-      <section className="do-surface flex min-h-[680px] flex-col">
-        <header className="border-b border-hairline px-6 py-6">
-          <div className="flex flex-col gap-4">
-            <Link
-              href={workspacePath(workspaceSlug, "/channels")}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-fit")}
-            >
-              <ArrowLeftIcon className="size-4" />
-              All club spaces
-            </Link>
+    <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
+      <aside className="space-y-4">
+        <section className="do-panel p-5">
+          <Link
+            href={workspacePath(workspaceSlug, "/channels")}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "w-fit text-tan"
+            )}
+          >
+            <ArrowLeftIcon className="size-4" />
+            Clubs
+          </Link>
 
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="mt-5 rounded-[28px] border border-hairline bg-surface/60 p-5">
+            <div className="flex size-16 items-center justify-center rounded-[20px] border border-hairline bg-panel/90 text-[20px] font-semibold tracking-[0.12em] text-cream">
+              {clubInitials(conversation.name)}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="do-pill">{conversation.category}</span>
+              <span className="do-pill">
+                {access === "members" ? (
+                  <>
+                    <LockKeyholeIcon className="size-3.5" />
+                    Approval
+                  </>
+                ) : (
+                  "Open"
+                )}
+              </span>
+            </div>
+            <h2 className="mt-4 text-[24px] font-semibold text-cream">
+              {conversation.name}
+            </h2>
+            <p className="mt-2 text-[13px] leading-6 text-tan">
+              {conversation.description}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="do-pill">{membershipLabel(viewerMembershipState)}</span>
+              {viewerClubRole ? (
+                <span className="do-pill">Your role: {clubRoleLabel(viewerClubRole)}</span>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        {selectedSection ? (
+          <section className="do-panel p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="do-eyebrow">Discussion</p>
+                <h3 className="mt-2 text-[20px] font-medium text-cream">
+                  Club channels
+                </h3>
+              </div>
+              {!conversation.isGeneral && conversation.canManage ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowSectionComposer((value) => !value)}
+                >
+                  <PlusIcon className="size-4" />
+                  Add
+                </Button>
+              ) : null}
+            </div>
+
+            <div className="mt-5 space-y-1.5">
+              {discussionSections.map((section) => {
+                const isActive = selectedSection.slug === section.slug
+
+                return (
+                  <Link
+                    key={section.slug}
+                    href={sectionHref(workspaceSlug, clubSlug, section.slug)}
+                    className={cn(
+                      "flex items-start justify-between gap-3 rounded-[18px] border px-3 py-3 transition-colors",
+                      isActive
+                        ? "border-hairline bg-active-row/80 text-cream"
+                        : "border-transparent bg-surface/35 text-tan hover:border-hairline hover:bg-surface/65 hover:text-cream"
+                    )}
+                  >
+                    <span className="flex min-w-0 gap-3">
+                      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/85 text-tan">
+                        <HashIcon className="size-3.5" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[14px] font-medium">
+                          {section.name}
+                        </span>
+                        <span className="mt-1 block truncate text-[11px] leading-5 opacity-80">
+                          {section.description ?? "Club discussion"}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="text-[11px] text-tan">{section.messageCount}</span>
+                  </Link>
+                )
+              })}
+            </div>
+
+            {!conversation.isGeneral && conversation.canManage && showSectionComposer ? (
+              <form onSubmit={handleCreateSection} className="mt-5 space-y-3 border-t border-hairline/80 pt-5">
+                <Input
+                  value={sectionName}
+                  onChange={(event) => setSectionName(event.target.value)}
+                  placeholder="Section name"
+                  disabled={isPending && pendingAction === "create-section"}
+                />
+                <textarea
+                  value={sectionDescription}
+                  onChange={(event) => setSectionDescription(event.target.value)}
+                  placeholder="Short description for this channel"
+                  className={textareaClassName}
+                  disabled={isPending && pendingAction === "create-section"}
+                />
+                <Button
+                  type="submit"
+                  disabled={
+                    (isPending && pendingAction === "create-section") ||
+                    !sectionName.trim()
+                  }
+                >
+                  <PlusIcon className="size-4" />
+                  Create section
+                </Button>
+              </form>
+            ) : null}
+          </section>
+        ) : null}
+
+        <section className="do-panel p-5">
+          <p className="do-eyebrow">Quick glance</p>
+          <div className="mt-4 grid gap-3">
+            <div className="rounded-[20px] border border-hairline bg-surface/55 p-4">
+              <p className="text-[11px] tracking-[0.12em] text-tan uppercase">Members</p>
+              <p className="mt-2 text-[18px] font-medium text-cream">
+                {memberCount !== null ? memberCount : "Campus-wide"}
+              </p>
+            </div>
+            <div className="rounded-[20px] border border-hairline bg-surface/55 p-4">
+              <p className="text-[11px] tracking-[0.12em] text-tan uppercase">Events</p>
+              <p className="mt-2 text-[18px] font-medium text-cream">
+                {clubOps.events.length}
+              </p>
+            </div>
+            <div className="rounded-[20px] border border-hairline bg-surface/55 p-4">
+              <p className="text-[11px] tracking-[0.12em] text-tan uppercase">Polls</p>
+              <p className="mt-2 text-[18px] font-medium text-cream">
+                {clubOps.polls.length}
+              </p>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <main className="space-y-6">
+        <section className="do-surface overflow-hidden">
+          <div className="border-b border-hairline px-6 py-6">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="do-eyebrow">Club Space</p>
-                  <span className="do-pill">{conversation.category}</span>
-                  {access === "members" ? (
-                    <span className="do-pill">
-                      <LockKeyholeIcon className="size-3.5" />
-                      Approval
-                    </span>
-                  ) : (
-                    <span className="do-pill">Open club</span>
-                  )}
+                  <span className="do-pill">Club details</span>
                   <span className="do-pill">
-                    {membershipLabel(viewerMembershipState)}
+                    <MessageSquareTextIcon className="size-3.5" />
+                    #{conversation.slug}
                   </span>
+                  {selectedSection ? (
+                    <span className="do-pill">
+                      <HashIcon className="size-3.5" />
+                      {selectedSection.slug}
+                    </span>
+                  ) : null}
                 </div>
-                <h2 className="mt-2 do-subheading">{conversation.name}</h2>
-                <p className="mt-2 max-w-2xl text-[13px] leading-6 text-tan">
+                <h1 className="mt-4 text-[30px] font-semibold tracking-tight text-cream">
+                  {conversation.name}
+                </h1>
+                <p className="mt-3 max-w-3xl text-[14px] leading-7 text-tan">
                   {conversation.description}
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <span className="do-pill">
-                  <MessageSquareTextIcon className="size-3.5" />
-                  #{conversation.slug}
-                </span>
-                {memberCount !== null ? (
-                  <span className="do-pill">{memberCount} members</span>
-                ) : null}
-                <span className="do-pill">{clubOps.events.length} events</span>
-                <span className="do-pill">{clubOps.polls.length} polls</span>
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="rounded-[20px] border border-hairline bg-surface/55 px-4 py-3">
+                  <p className="text-[10px] tracking-[0.15em] text-tan uppercase">Access</p>
+                  <p className="mt-2 text-[14px] font-medium text-cream">
+                    {access === "public" ? "Open club" : "Approval required"}
+                  </p>
+                </div>
+                <div className="rounded-[20px] border border-hairline bg-surface/55 px-4 py-3">
+                  <p className="text-[10px] tracking-[0.15em] text-tan uppercase">Section</p>
+                  <p className="mt-2 text-[14px] font-medium text-cream">
+                    {selectedSection?.name ?? "Overview"}
+                  </p>
+                </div>
+                <div className="rounded-[20px] border border-hairline bg-surface/55 px-4 py-3">
+                  <p className="text-[10px] tracking-[0.15em] text-tan uppercase">Activity</p>
+                  <p className="mt-2 text-[14px] font-medium text-cream">
+                    {selectedSection
+                      ? formatRelativeActivity(selectedSection.lastMessageAt)
+                      : "No activity yet"}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        </header>
 
-        <div className="flex-1 space-y-6 px-6 py-6">
-          {!canViewMessages ? (
-            <div className="do-card p-6">
-              <p className="text-[16px] font-medium text-cream">
-                Join this club to view its activity.
-              </p>
-              <div className="mt-5 flex flex-wrap gap-2">
-                {canJoin ? (
-                  <Button
-                    disabled={isPending && pendingAction === "join-open-club"}
-                    onClick={() =>
-                      runAction(
-                        "join-open-club",
-                        () => joinOpenClub({ workspaceSlug, slug }),
-                        "You joined the club"
-                      )
-                    }
-                  >
-                    Join club
-                  </Button>
-                ) : canRequestToJoin ? (
-                  <Button
-                    disabled={isPending && pendingAction === "request-to-join"}
-                    onClick={() =>
-                      runAction(
-                        "request-to-join",
-                        () => requestToJoin({ workspaceSlug, slug }),
-                        "Join request sent"
-                      )
-                    }
-                  >
-                    Request to join
-                  </Button>
-                ) : viewerMembershipState === "pending" ? (
-                  <span className="do-pill">Your request is waiting for review</span>
+          <div className="space-y-6 px-6 py-6">
+            <section className="do-panel p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p className="do-eyebrow">Current section</p>
+                  <h3 className="mt-2 text-[22px] font-medium text-cream">
+                    {selectedSection ? `# ${selectedSection.name}` : "Discussion"}
+                  </h3>
+                  <p className="mt-2 text-[13px] leading-6 text-tan">
+                    {selectedSection?.description ??
+                      "Keep discussion organized by topic instead of one long club feed."}
+                  </p>
+                </div>
+                {selectedSection ? (
+                  <div className="flex flex-wrap gap-2">
+                    <span className="do-pill">{selectedSection.messageCount} messages</span>
+                    <span className="do-pill">
+                      {formatRelativeActivity(selectedSection.lastMessageAt)}
+                    </span>
+                  </div>
                 ) : null}
               </div>
-            </div>
-          ) : (
-            <>
-              <section className="do-panel p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="do-eyebrow">Events</p>
-                    <h3 className="mt-2 text-[24px] font-medium text-cream">
-                      Events and tickets
-                    </h3>
-                  </div>
-                  {!clubOps.canManage ? (
-                    <span className="do-pill">Managers create events</span>
+            </section>
+
+            {!canViewMessages ? (
+              <section className="do-card p-6">
+                <p className="text-[16px] font-medium text-cream">
+                  Join this club to unlock its discussion, events, and polls.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {canJoin ? (
+                    <ActionButton
+                      label="Join club"
+                      disabled={isPending && pendingAction === "join-open-club"}
+                      onClick={() =>
+                        runAction(
+                          "join-open-club",
+                          () => joinOpenClub({ workspaceSlug, slug: clubSlug }),
+                          "You joined the club"
+                        )
+                      }
+                    />
+                  ) : canRequestToJoin ? (
+                    <ActionButton
+                      label="Request to join"
+                      disabled={isPending && pendingAction === "request-to-join"}
+                      onClick={() =>
+                        runAction(
+                          "request-to-join",
+                          () => requestToJoin({ workspaceSlug, slug: clubSlug }),
+                          "Join request sent"
+                        )
+                      }
+                    />
+                  ) : viewerMembershipState === "pending" ? (
+                    <span className="do-pill">Your request is waiting for review</span>
                   ) : null}
                 </div>
+              </section>
+            ) : (
+              <section id="club-discussion" className="do-panel p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <p className="do-eyebrow">Discussion</p>
+                    <h3 className="mt-2 text-[24px] font-medium text-cream">
+                      {selectedSection ? `# ${selectedSection.name}` : "Club discussion"}
+                    </h3>
+                  </div>
+                  <span className="do-pill">
+                    {selectedSection ? `${selectedSection.messageCount} messages` : "0 messages"}
+                  </span>
+                </div>
 
-                <div className="mt-5 grid gap-4 xl:grid-cols-[320px_1fr]">
-                  <div className="do-card p-4">
-                    <div className="inline-flex items-center gap-2 text-[12px] text-parchment">
-                      <TicketIcon className="size-4 text-terracotta" />
-                      Create event
-                    </div>
-
-                    <form onSubmit={handleCreateEvent} className="mt-4 space-y-3">
-                      <Input
-                        value={eventTitle}
-                        onChange={(event) => setEventTitle(event.target.value)}
-                        placeholder="Event title"
-                        disabled={!clubOps.canManage || (isPending && pendingAction === "create-club-event")}
-                      />
-                      <textarea
-                        value={eventSummary}
-                        onChange={(event) => setEventSummary(event.target.value)}
-                        placeholder="What is this event about?"
-                        className={textareaClassName}
-                        disabled={!clubOps.canManage || (isPending && pendingAction === "create-club-event")}
-                      />
-                      <Input
-                        type="date"
-                        value={eventDate}
-                        onChange={(event) => setEventDate(event.target.value)}
-                        disabled={!clubOps.canManage || (isPending && pendingAction === "create-club-event")}
-                      />
-                      <Input
-                        value={eventTime}
-                        onChange={(event) => setEventTime(event.target.value)}
-                        placeholder="6:30 PM"
-                        disabled={!clubOps.canManage || (isPending && pendingAction === "create-club-event")}
-                      />
-                      <Input
-                        value={eventLocation}
-                        onChange={(event) => setEventLocation(event.target.value)}
-                        placeholder="Main auditorium or meeting link"
-                        disabled={!clubOps.canManage || (isPending && pendingAction === "create-club-event")}
-                      />
-                      <Button
-                        type="submit"
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-event") ||
-                          !eventTitle.trim() ||
-                          !eventDate ||
-                          !eventTime.trim() ||
-                          !eventLocation.trim()
-                        }
-                      >
-                        <PlusIcon className="size-4" />
-                        Publish event
-                      </Button>
-                    </form>
+                <div className="mt-5 rounded-[24px] border border-hairline bg-black/10">
+                  <div className="max-h-[640px] space-y-4 overflow-y-auto px-4 py-5 sm:px-5">
+                    {timeline.length === 0 ? (
+                      <div className="rounded-[20px] border border-dashed border-hairline bg-surface/45 p-5 text-[13px] leading-6 text-tan">
+                        No messages yet in this section. Start the conversation.
+                      </div>
+                    ) : (
+                      timeline.map((item) =>
+                        item.type === "divider" ? (
+                          <div key={item.key} className="flex items-center gap-3 py-2">
+                            <div className="h-px flex-1 bg-hairline" />
+                            <span className="text-[10px] tracking-[0.16em] text-tan uppercase">
+                              {item.label}
+                            </span>
+                            <div className="h-px flex-1 bg-hairline" />
+                          </div>
+                        ) : (
+                          <article key={item.key} className="rounded-[22px] px-1 py-2">
+                            <div className="flex items-start gap-3">
+                              <button
+                                type="button"
+                                className="mt-1 flex size-11 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[13px] font-medium text-cream"
+                                onClick={() => setSelectedMemberId(item.author.id)}
+                              >
+                                {item.author.name.charAt(0)}
+                              </button>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    className="truncate text-left text-[15px] font-medium text-cream hover:text-parchment"
+                                    onClick={() => setSelectedMemberId(item.author.id)}
+                                  >
+                                    {item.author.name}
+                                  </button>
+                                  {item.author.isCurrentUser ? (
+                                    <span className="do-pill">You</span>
+                                  ) : null}
+                                  <span className="text-[10px] tracking-[0.14em] text-tan uppercase">
+                                    {formatMessageTime(item.createdAt)}
+                                  </span>
+                                </div>
+                                <div className="mt-2 space-y-2">
+                                  {item.entries.map((entry) => (
+                                    <p
+                                      key={entry.id}
+                                      className="text-[14px] leading-7 text-tan"
+                                    >
+                                      {entry.body}
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </article>
+                        )
+                      )
+                    )}
                   </div>
 
-                  <div className="space-y-4">
-                    {clubOps.events.length ? (
-                      clubOps.events.map((event) => (
-                        <div key={event.id} className="do-card p-5">
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-[18px] font-medium text-cream">
-                                  {event.title}
-                                </p>
-                                <span className="do-pill">{event.status}</span>
-                                <span className="do-pill">
-                                  <ClipboardListIcon className="size-3.5" />
-                                  {event.ticketCount} tickets
-                                </span>
-                                <span className="do-pill">
-                                  <CheckCircle2Icon className="size-3.5" />
-                                  {event.checkedInCount} checked in
-                                </span>
+                  {canPostMessages ? (
+                    <form onSubmit={handleSubmit} className="border-t border-hairline px-4 py-4 sm:px-5">
+                      <textarea
+                        value={message}
+                        onChange={(event) => setMessage(event.target.value)}
+                        placeholder={
+                          selectedSection
+                            ? `Message #${selectedSection.slug}`
+                            : "Message this club"
+                        }
+                        className={composerClassName}
+                        disabled={isPending && pendingAction === "send-message"}
+                      />
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <p className="text-[12px] leading-6 text-tan">
+                          Keep this section focused on {selectedSection?.name ?? "the current topic"}.
+                        </p>
+                        <Button
+                          type="submit"
+                          disabled={
+                            (isPending && pendingAction === "send-message") ||
+                            !message.trim()
+                          }
+                        >
+                          Send
+                          <SendHorizonalIcon className="size-4" />
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="border-t border-hairline px-4 py-4 text-[13px] leading-6 text-tan sm:px-5">
+                      Discussion is read-only right now.
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {clubOps.canParticipate ? (
+              <>
+                <section className="do-panel p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="do-eyebrow">Events</p>
+                      <h3 className="mt-2 text-[24px] font-medium text-cream">
+                        Events and tickets
+                      </h3>
+                    </div>
+                    {!clubOps.canManage ? (
+                      <span className="do-pill">Managers create events</span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-5 grid gap-4 2xl:grid-cols-[320px_1fr]">
+                    <div className="do-card p-4">
+                      <div className="inline-flex items-center gap-2 text-[12px] text-parchment">
+                        <TicketIcon className="size-4 text-terracotta" />
+                        Create event
+                      </div>
+
+                      <form onSubmit={handleCreateEvent} className="mt-4 space-y-3">
+                        <Input
+                          value={eventTitle}
+                          onChange={(event) => setEventTitle(event.target.value)}
+                          placeholder="Event title"
+                          disabled={
+                            !clubOps.canManage ||
+                            (isPending && pendingAction === "create-club-event")
+                          }
+                        />
+                        <textarea
+                          value={eventSummary}
+                          onChange={(event) => setEventSummary(event.target.value)}
+                          placeholder="What is this event about?"
+                          className={textareaClassName}
+                          disabled={
+                            !clubOps.canManage ||
+                            (isPending && pendingAction === "create-club-event")
+                          }
+                        />
+                        <Input
+                          type="date"
+                          value={eventDate}
+                          onChange={(event) => setEventDate(event.target.value)}
+                          disabled={
+                            !clubOps.canManage ||
+                            (isPending && pendingAction === "create-club-event")
+                          }
+                        />
+                        <Input
+                          value={eventTime}
+                          onChange={(event) => setEventTime(event.target.value)}
+                          placeholder="6:30 PM"
+                          disabled={
+                            !clubOps.canManage ||
+                            (isPending && pendingAction === "create-club-event")
+                          }
+                        />
+                        <Input
+                          value={eventLocation}
+                          onChange={(event) => setEventLocation(event.target.value)}
+                          placeholder="Main auditorium or meeting link"
+                          disabled={
+                            !clubOps.canManage ||
+                            (isPending && pendingAction === "create-club-event")
+                          }
+                        />
+                        <Button
+                          type="submit"
+                          disabled={
+                            !clubOps.canManage ||
+                            (isPending && pendingAction === "create-club-event") ||
+                            !eventTitle.trim() ||
+                            !eventDate ||
+                            !eventTime.trim() ||
+                            !eventLocation.trim()
+                          }
+                        >
+                          <PlusIcon className="size-4" />
+                          Publish event
+                        </Button>
+                      </form>
+                    </div>
+
+                    <div className="space-y-4">
+                      {clubOps.events.length ? (
+                        clubOps.events.map((event) => (
+                          <div key={event.id} className="do-card p-5">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-[18px] font-medium text-cream">
+                                    {event.title}
+                                  </p>
+                                  <span className="do-pill">{event.status}</span>
+                                  <span className="do-pill">
+                                    <ClipboardListIcon className="size-3.5" />
+                                    {event.ticketCount} tickets
+                                  </span>
+                                  <span className="do-pill">
+                                    <CheckCircle2Icon className="size-3.5" />
+                                    {event.checkedInCount} checked in
+                                  </span>
+                                </div>
+                                {event.summary ? (
+                                  <p className="mt-3 text-[13px] leading-6 text-tan">
+                                    {event.summary}
+                                  </p>
+                                ) : null}
+                                <div className="mt-4 flex flex-wrap gap-2">
+                                  <span className="do-pill">
+                                    <CalendarDaysIcon className="size-3.5" />
+                                    {formatEventDate(event.date)} · {event.time}
+                                  </span>
+                                  <span className="do-pill">
+                                    <MapPinIcon className="size-3.5" />
+                                    {event.location}
+                                  </span>
+                                </div>
                               </div>
-                              {event.summary ? (
-                                <p className="mt-3 text-[13px] leading-6 text-tan">
-                                  {event.summary}
-                                </p>
-                              ) : null}
-                              <div className="mt-4 flex flex-wrap gap-2">
-                                <span className="do-pill">
-                                  <CalendarDaysIcon className="size-3.5" />
-                                  {formatEventDate(event.date)} · {event.time}
-                                </span>
-                                <span className="do-pill">
-                                  <MapPinIcon className="size-3.5" />
-                                  {event.location}
-                                </span>
-                              </div>
+
+                              {event.viewerTicket ? (
+                                <span className="do-pill">Your ticket is ready</span>
+                              ) : event.status === "open" ? (
+                                <Button
+                                  disabled={
+                                    isPending &&
+                                    pendingAction === `join-event-${event.id}`
+                                  }
+                                  onClick={() =>
+                                    runAction(
+                                      `join-event-${event.id}`,
+                                      () =>
+                                        joinClubEvent({
+                                          workspaceSlug,
+                                          slug: clubSlug,
+                                          eventId: event.id,
+                                        }),
+                                      "Ticket generated"
+                                    )
+                                  }
+                                >
+                                  <TicketIcon className="size-4" />
+                                  Join event
+                                </Button>
+                              ) : (
+                                <span className="do-pill">Ticketing closed</span>
+                              )}
                             </div>
 
                             {event.viewerTicket ? (
-                              <span className="do-pill">Your ticket is ready</span>
-                            ) : event.status === "open" ? (
-                              <Button
-                                disabled={isPending && pendingAction === `join-event-${event.id}`}
-                                onClick={() =>
-                                  runAction(
-                                    `join-event-${event.id}`,
-                                    () =>
-                                      joinClubEvent({
-                                        workspaceSlug,
-                                        slug,
-                                        eventId: event.id,
-                                      }),
-                                    "Ticket generated"
-                                  )
-                                }
-                              >
-                                <TicketIcon className="size-4" />
-                                Join event
-                              </Button>
-                            ) : (
-                              <span className="do-pill">Ticketing closed</span>
-                            )}
-                          </div>
-
-                          {event.viewerTicket ? (
-                            <div className="mt-5 rounded-[24px] border border-hairline bg-surface/55 p-4">
-                              <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
-                                <div>
-                                  <p className="do-eyebrow">Your Ticket</p>
-                                  <h4 className="mt-2 text-[22px] font-medium text-cream">
-                                    {event.viewerTicket.eventTitle}
-                                  </h4>
-                                  <div className="mt-4 flex flex-wrap gap-2">
-                                    <span className="do-pill">
-                                      {event.viewerTicket.attendeeName}
-                                    </span>
-                                    <span className="do-pill">
-                                      {event.viewerTicket.organizationName}
-                                    </span>
-                                    <span className="do-pill">
-                                      {event.viewerTicket.code}
-                                    </span>
-                                    <span className="do-pill">
-                                      {event.viewerTicket.checkedInAt
-                                        ? "Checked in"
-                                        : "Ready for entry"}
-                                    </span>
-                                  </div>
-                                  <p className="mt-4 text-[13px] leading-6 text-tan">
-                                    Club: {event.viewerTicket.clubName}
-                                  </p>
-                                  <p className="mt-1 text-[13px] leading-6 text-tan">
-                                    Entry: {formatEventDate(event.viewerTicket.eventDate)} at{" "}
-                                    {event.viewerTicket.eventTime}
-                                  </p>
-                                  <p className="mt-1 text-[13px] leading-6 text-tan">
-                                    Venue: {event.viewerTicket.eventLocation}
-                                  </p>
-                                  {event.viewerTicket.attendeeEmail ? (
-                                    <p className="mt-1 text-[13px] leading-6 text-tan">
-                                      Email: {event.viewerTicket.attendeeEmail}
+                              <div className="mt-5 rounded-[24px] border border-hairline bg-surface/55 p-4">
+                                <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
+                                  <div>
+                                    <p className="do-eyebrow">Your Ticket</p>
+                                    <h4 className="mt-2 text-[22px] font-medium text-cream">
+                                      {event.viewerTicket.eventTitle}
+                                    </h4>
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                      <span className="do-pill">
+                                        {event.viewerTicket.attendeeName}
+                                      </span>
+                                      <span className="do-pill">
+                                        {event.viewerTicket.organizationName}
+                                      </span>
+                                      <span className="do-pill">
+                                        {event.viewerTicket.code}
+                                      </span>
+                                      <span className="do-pill">
+                                        {event.viewerTicket.checkedInAt
+                                          ? "Checked in"
+                                          : "Ready for entry"}
+                                      </span>
+                                    </div>
+                                    <p className="mt-4 text-[13px] leading-6 text-tan">
+                                      Club: {event.viewerTicket.clubName}
                                     </p>
-                                  ) : null}
-                                </div>
-                                <TicketQr
-                                  value={event.viewerTicket.qrValue}
-                                  alt={`${event.viewerTicket.eventTitle} ticket QR`}
-                                />
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {clubOps.canManage && event.attendees.length ? (
-                            <div className="mt-5 space-y-3">
-                              <p className="do-eyebrow">Attendee roster</p>
-                              {event.attendees.map((attendee) => (
-                                <div
-                                  key={attendee.ticketId}
-                                  className="rounded-[20px] border border-hairline bg-surface/55 p-4"
-                                >
-                                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                    <button
-                                      type="button"
-                                      className="min-w-0 flex-1 text-left"
-                                      onClick={() => setSelectedMemberId(attendee.userId)}
-                                    >
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <p className="text-[15px] font-medium text-cream">
-                                          {attendee.name}
-                                        </p>
-                                        <span className="do-pill">{attendee.code}</span>
-                                        <span className="do-pill">
-                                          {attendee.checkedInAt ? "Checked in" : "Waiting"}
-                                        </span>
-                                      </div>
-                                      <p className="mt-2 text-[12px] leading-6 text-tan">
-                                        {attendee.email ?? "No email synced"}
+                                    <p className="mt-1 text-[13px] leading-6 text-tan">
+                                      Entry: {formatEventDate(event.viewerTicket.eventDate)} at{" "}
+                                      {event.viewerTicket.eventTime}
+                                    </p>
+                                    <p className="mt-1 text-[13px] leading-6 text-tan">
+                                      Venue: {event.viewerTicket.eventLocation}
+                                    </p>
+                                    {event.viewerTicket.attendeeEmail ? (
+                                      <p className="mt-1 text-[13px] leading-6 text-tan">
+                                        Email: {event.viewerTicket.attendeeEmail}
                                       </p>
-                                      <p className="mt-1 text-[12px] leading-6 text-tan">
-                                        Claimed {formatShortDate(attendee.createdAt)}
-                                        {attendee.checkedInAt
-                                          ? ` · Checked in by ${
-                                              attendee.checkedInByName ?? "club staff"
-                                            }`
-                                          : ""}
-                                      </p>
-                                    </button>
-
-                                    {attendee.checkedInAt ? (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={
-                                          isPending &&
-                                          pendingAction === `reset-ticket-${attendee.ticketId}`
-                                        }
-                                        onClick={() =>
-                                          runAction(
-                                            `reset-ticket-${attendee.ticketId}`,
-                                            () =>
-                                              resetClubTicket({
-                                                workspaceSlug,
-                                                slug,
-                                                ticketId: attendee.ticketId,
-                                              }),
-                                            "Ticket reset"
-                                          )
-                                        }
-                                      >
-                                        Reset
-                                      </Button>
-                                    ) : (
-                                      <Button
-                                        size="sm"
-                                        disabled={
-                                          isPending &&
-                                          pendingAction === `checkin-ticket-${attendee.ticketId}`
-                                        }
-                                        onClick={() =>
-                                          runAction(
-                                            `checkin-ticket-${attendee.ticketId}`,
-                                            () =>
-                                              checkInClubTicket({
-                                                workspaceSlug,
-                                                slug,
-                                                ticketId: attendee.ticketId,
-                                              }),
-                                            "Ticket checked in"
-                                          )
-                                        }
-                                      >
-                                        Check in
-                                      </Button>
-                                    )}
+                                    ) : null}
                                   </div>
+                                  <TicketQr
+                                    value={event.viewerTicket.qrValue}
+                                    alt={`${event.viewerTicket.eventTitle} ticket QR`}
+                                  />
                                 </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded-[24px] border border-dashed border-hairline bg-surface/55 p-5 text-[13px] leading-6 text-tan">
-                        No events yet.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              <section className="do-panel p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="do-eyebrow">Polls</p>
-                    <h3 className="mt-2 text-[24px] font-medium text-cream">
-                      Club decisions
-                    </h3>
-                  </div>
-                  {!clubOps.canManage ? (
-                    <span className="do-pill">Managers publish polls</span>
-                  ) : null}
-                </div>
-
-                <div className="mt-5 grid gap-4 xl:grid-cols-[320px_1fr]">
-                  <div className="do-card p-4">
-                    <div className="inline-flex items-center gap-2 text-[12px] text-parchment">
-                      <VoteIcon className="size-4 text-sage" />
-                      Create poll
-                    </div>
-
-                    <form onSubmit={handleCreatePoll} className="mt-4 space-y-3">
-                      <Input
-                        value={pollQuestion}
-                        onChange={(event) => setPollQuestion(event.target.value)}
-                        placeholder="What should the club decide?"
-                        disabled={!clubOps.canManage || (isPending && pendingAction === "create-club-poll")}
-                      />
-                      <textarea
-                        value={pollDescription}
-                        onChange={(event) => setPollDescription(event.target.value)}
-                        placeholder="Optional context"
-                        className={textareaClassName}
-                        disabled={!clubOps.canManage || (isPending && pendingAction === "create-club-poll")}
-                      />
-                      <textarea
-                        value={pollOptions}
-                        onChange={(event) => setPollOptions(event.target.value)}
-                        placeholder={"Option one\nOption two\nOption three"}
-                        className={textareaClassName}
-                        disabled={!clubOps.canManage || (isPending && pendingAction === "create-club-poll")}
-                      />
-                      <Button
-                        type="submit"
-                        disabled={
-                          !clubOps.canManage ||
-                          (isPending && pendingAction === "create-club-poll") ||
-                          !pollQuestion.trim() ||
-                          !pollOptions.trim()
-                        }
-                      >
-                        <PlusIcon className="size-4" />
-                        Publish poll
-                      </Button>
-                    </form>
-                  </div>
-
-                  <div className="space-y-4">
-                    {clubOps.polls.length ? (
-                      clubOps.polls.map((poll) => (
-                        <div key={poll.id} className="do-card p-5">
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-[17px] font-medium text-cream">
-                                  {poll.question}
-                                </p>
-                                <span className="do-pill">{poll.status}</span>
-                                <span className="do-pill">
-                                  <ClipboardListIcon className="size-3.5" />
-                                  {poll.totalVotes} votes
-                                </span>
                               </div>
-                              {poll.description ? (
-                                <p className="mt-3 text-[13px] leading-6 text-tan">
-                                  {poll.description}
-                                </p>
-                              ) : null}
-                            </div>
+                            ) : null}
 
-                            {clubOps.canManage ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={
-                                  isPending &&
-                                  pendingAction === `toggle-club-poll-${poll.id}`
-                                }
-                                onClick={() =>
-                                  runAction(
-                                    `toggle-club-poll-${poll.id}`,
-                                    () =>
-                                      setClubPollStatus({
-                                        workspaceSlug,
-                                        slug,
-                                        pollId: poll.id,
-                                        status:
-                                          poll.status === "open" ? "closed" : "open",
-                                      }),
-                                    poll.status === "open"
-                                      ? "Club poll closed"
-                                      : "Club poll reopened"
-                                  )
-                                }
-                              >
-                                {poll.status === "open" ? "Close poll" : "Reopen poll"}
-                              </Button>
+                            {clubOps.canManage && event.attendees.length ? (
+                              <div className="mt-5 space-y-3">
+                                <p className="do-eyebrow">Attendee roster</p>
+                                {event.attendees.map((attendee) => (
+                                  <div
+                                    key={attendee.ticketId}
+                                    className="rounded-[20px] border border-hairline bg-surface/55 p-4"
+                                  >
+                                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                      <button
+                                        type="button"
+                                        className="min-w-0 flex-1 text-left"
+                                        onClick={() => setSelectedMemberId(attendee.userId)}
+                                      >
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <p className="text-[15px] font-medium text-cream">
+                                            {attendee.name}
+                                          </p>
+                                          <span className="do-pill">{attendee.code}</span>
+                                          <span className="do-pill">
+                                            {attendee.checkedInAt ? "Checked in" : "Waiting"}
+                                          </span>
+                                        </div>
+                                        <p className="mt-2 text-[12px] leading-6 text-tan">
+                                          {attendee.email ?? "No email synced"}
+                                        </p>
+                                        <p className="mt-1 text-[12px] leading-6 text-tan">
+                                          Claimed {formatShortDate(attendee.createdAt)}
+                                          {attendee.checkedInAt
+                                            ? ` · Checked in by ${
+                                                attendee.checkedInByName ?? "club staff"
+                                              }`
+                                            : ""}
+                                        </p>
+                                      </button>
+
+                                      {attendee.checkedInAt ? (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          disabled={
+                                            isPending &&
+                                            pendingAction ===
+                                              `reset-ticket-${attendee.ticketId}`
+                                          }
+                                          onClick={() =>
+                                            runAction(
+                                              `reset-ticket-${attendee.ticketId}`,
+                                              () =>
+                                                resetClubTicket({
+                                                  workspaceSlug,
+                                                  slug: clubSlug,
+                                                  ticketId: attendee.ticketId,
+                                                }),
+                                              "Ticket reset"
+                                            )
+                                          }
+                                        >
+                                          Reset
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          size="sm"
+                                          disabled={
+                                            isPending &&
+                                            pendingAction ===
+                                              `checkin-ticket-${attendee.ticketId}`
+                                          }
+                                          onClick={() =>
+                                            runAction(
+                                              `checkin-ticket-${attendee.ticketId}`,
+                                              () =>
+                                                checkInClubTicket({
+                                                  workspaceSlug,
+                                                  slug: clubSlug,
+                                                  ticketId: attendee.ticketId,
+                                                }),
+                                              "Ticket checked in"
+                                            )
+                                          }
+                                        >
+                                          Check in
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             ) : null}
                           </div>
-
-                          <div className="mt-4 space-y-3">
-                            {poll.options.map((option) => {
-                              const isSelected = poll.viewerVoteOptionId === option.id
-
-                              return (
-                                <div
-                                  key={option.id}
-                                  className={`rounded-[20px] border p-3 transition-colors ${
-                                    isSelected
-                                      ? "border-ring bg-active-row/70"
-                                      : "border-hairline bg-surface/55"
-                                  }`}
-                                >
-                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                      <p className="text-[14px] font-medium text-cream">
-                                        {option.label}
-                                      </p>
-                                      <p className="mt-1 text-[12px] leading-6 text-tan">
-                                        {option.votes} votes · {option.percentage}% of turnout
-                                      </p>
-                                    </div>
-                                    <Button
-                                      size="sm"
-                                      variant={isSelected ? "default" : "outline"}
-                                      disabled={
-                                        poll.status !== "open" ||
-                                        (isPending &&
-                                          pendingAction === `vote-club-poll-${poll.id}`)
-                                      }
-                                      onClick={() =>
-                                        runAction(
-                                          `vote-club-poll-${poll.id}`,
-                                          () =>
-                                            voteOnClubPoll({
-                                              workspaceSlug,
-                                              slug,
-                                              pollId: poll.id,
-                                              optionId: option.id,
-                                            }),
-                                          "Vote recorded"
-                                        )
-                                      }
-                                    >
-                                      {isSelected ? "Selected" : "Vote"}
-                                    </Button>
-                                  </div>
-                                  <div className="mt-3 h-2 rounded-full bg-field/70">
-                                    <div
-                                      className={`h-2 rounded-full transition-[width] duration-200 ${
-                                        isSelected ? "bg-cream" : "bg-sage"
-                                      }`}
-                                      style={{ width: `${option.percentage}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <span className="do-pill">Opened by {poll.createdByName}</span>
-                            <span className="do-pill">
-                              <Clock3Icon className="size-3.5" />
-                              {formatShortDate(poll.createdAt)}
-                            </span>
-                          </div>
+                        ))
+                      ) : (
+                        <div className="rounded-[24px] border border-dashed border-hairline bg-surface/55 p-5 text-[13px] leading-6 text-tan">
+                          No events yet.
                         </div>
-                      ))
-                    ) : (
-                      <div className="rounded-[24px] border border-dashed border-hairline bg-surface/55 p-5 text-[13px] leading-6 text-tan">
-                        No polls yet.
+                      )}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="do-panel p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="do-eyebrow">Polls</p>
+                      <h3 className="mt-2 text-[24px] font-medium text-cream">
+                        Club decisions
+                      </h3>
+                    </div>
+                    {!clubOps.canManage ? (
+                      <span className="do-pill">Managers publish polls</span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-5 grid gap-4 2xl:grid-cols-[320px_1fr]">
+                    <div className="do-card p-4">
+                      <div className="inline-flex items-center gap-2 text-[12px] text-parchment">
+                        <VoteIcon className="size-4 text-sage" />
+                        Create poll
                       </div>
-                    )}
-                  </div>
-                </div>
-              </section>
 
-              <section className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="do-eyebrow">Chat</p>
-                    <h3 className="mt-2 text-[22px] font-medium text-cream">
-                      Messages
-                    </h3>
-                  </div>
-                </div>
-
-                {messages.length === 0 ? (
-                  <div className="do-card p-5 text-[13px] leading-6 text-tan">
-                    No messages yet.
-                  </div>
-                ) : (
-                  messages.map((entry) => (
-                    <article key={entry.id} className="do-card p-5">
-                      <div className="flex items-start gap-4">
-                        <button
-                          type="button"
-                          className="flex items-start gap-4 text-left"
-                          onClick={() => setSelectedMemberId(entry.author.id)}
+                      <form onSubmit={handleCreatePoll} className="mt-4 space-y-3">
+                        <Input
+                          value={pollQuestion}
+                          onChange={(event) => setPollQuestion(event.target.value)}
+                          placeholder="What should the club decide?"
+                          disabled={
+                            !clubOps.canManage ||
+                            (isPending && pendingAction === "create-club-poll")
+                          }
+                        />
+                        <textarea
+                          value={pollDescription}
+                          onChange={(event) => setPollDescription(event.target.value)}
+                          placeholder="Optional context"
+                          className={textareaClassName}
+                          disabled={
+                            !clubOps.canManage ||
+                            (isPending && pendingAction === "create-club-poll")
+                          }
+                        />
+                        <textarea
+                          value={pollOptions}
+                          onChange={(event) => setPollOptions(event.target.value)}
+                          placeholder={"Option one\nOption two\nOption three"}
+                          className={textareaClassName}
+                          disabled={
+                            !clubOps.canManage ||
+                            (isPending && pendingAction === "create-club-poll")
+                          }
+                        />
+                        <Button
+                          type="submit"
+                          disabled={
+                            !clubOps.canManage ||
+                            (isPending && pendingAction === "create-club-poll") ||
+                            !pollQuestion.trim() ||
+                            !pollOptions.trim()
+                          }
                         >
-                          <div className="flex size-11 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-[13px] font-medium text-cream">
-                            {entry.author.name.charAt(0)}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-[15px] font-medium text-cream">
-                                {entry.author.name}
-                              </p>
-                              {entry.author.isCurrentUser ? (
-                                <span className="do-pill">You</span>
+                          <PlusIcon className="size-4" />
+                          Publish poll
+                        </Button>
+                      </form>
+                    </div>
+
+                    <div className="space-y-4">
+                      {clubOps.polls.length ? (
+                        clubOps.polls.map((poll) => (
+                          <div key={poll.id} className="do-card p-5">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-[17px] font-medium text-cream">
+                                    {poll.question}
+                                  </p>
+                                  <span className="do-pill">{poll.status}</span>
+                                  <span className="do-pill">
+                                    <ClipboardListIcon className="size-3.5" />
+                                    {poll.totalVotes} votes
+                                  </span>
+                                </div>
+                                {poll.description ? (
+                                  <p className="mt-3 text-[13px] leading-6 text-tan">
+                                    {poll.description}
+                                  </p>
+                                ) : null}
+                              </div>
+
+                              {clubOps.canManage ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={
+                                    isPending &&
+                                    pendingAction === `toggle-club-poll-${poll.id}`
+                                  }
+                                  onClick={() =>
+                                    runAction(
+                                      `toggle-club-poll-${poll.id}`,
+                                      () =>
+                                        setClubPollStatus({
+                                          workspaceSlug,
+                                          slug: clubSlug,
+                                          pollId: poll.id,
+                                          status:
+                                            poll.status === "open" ? "closed" : "open",
+                                        }),
+                                      poll.status === "open"
+                                        ? "Club poll closed"
+                                        : "Club poll reopened"
+                                    )
+                                  }
+                                >
+                                  {poll.status === "open" ? "Close poll" : "Reopen poll"}
+                                </Button>
                               ) : null}
-                              <span className="text-[10px] tracking-[0.14em] text-tan uppercase">
-                                {formatMessageTime(entry.createdAt)}
+                            </div>
+
+                            <div className="mt-4 space-y-3">
+                              {poll.options.map((option) => {
+                                const isSelected = poll.viewerVoteOptionId === option.id
+
+                                return (
+                                  <div
+                                    key={option.id}
+                                    className={cn(
+                                      "rounded-[20px] border p-3 transition-colors",
+                                      isSelected
+                                        ? "border-ring bg-active-row/70"
+                                        : "border-hairline bg-surface/55"
+                                    )}
+                                  >
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                      <div>
+                                        <p className="text-[14px] font-medium text-cream">
+                                          {option.label}
+                                        </p>
+                                        <p className="mt-1 text-[12px] leading-6 text-tan">
+                                          {option.votes} votes · {option.percentage}% of turnout
+                                        </p>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant={isSelected ? "default" : "outline"}
+                                        disabled={
+                                          poll.status !== "open" ||
+                                          (isPending &&
+                                            pendingAction === `vote-club-poll-${poll.id}`)
+                                        }
+                                        onClick={() =>
+                                          runAction(
+                                            `vote-club-poll-${poll.id}`,
+                                            () =>
+                                              voteOnClubPoll({
+                                                workspaceSlug,
+                                                slug: clubSlug,
+                                                pollId: poll.id,
+                                                optionId: option.id,
+                                              }),
+                                            "Vote recorded"
+                                          )
+                                        }
+                                      >
+                                        {isSelected ? "Selected" : "Vote"}
+                                      </Button>
+                                    </div>
+                                    <div className="mt-3 h-2 rounded-full bg-field/70">
+                                      <div
+                                        className={cn(
+                                          "h-2 rounded-full transition-[width] duration-200",
+                                          isSelected ? "bg-cream" : "bg-sage"
+                                        )}
+                                        style={{ width: `${option.percentage}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <span className="do-pill">Opened by {poll.createdByName}</span>
+                              <span className="do-pill">
+                                <Clock3Icon className="size-3.5" />
+                                {formatShortDate(poll.createdAt)}
                               </span>
                             </div>
                           </div>
-                        </button>
-                      </div>
-                      <p className="mt-3 max-w-3xl text-[13px] leading-7 text-tan">
-                        {entry.body}
-                      </p>
-                    </article>
-                  ))
-                )}
-              </section>
-            </>
-          )}
-        </div>
-
-        {canPostMessages ? (
-          <footer className="border-t border-hairline px-4 py-4">
-            <form
-              onSubmit={handleSubmit}
-              className="rounded-[24px] border border-hairline bg-panel/70 p-4 backdrop-blur"
-            >
-              <div className="mt-1 flex flex-col gap-3 md:flex-row md:items-center">
-                <Input
-                  value={message}
-                  onChange={(event) => setMessage(event.target.value)}
-                  placeholder={`Message ${conversation.name}...`}
-                  className="h-12 flex-1"
-                  disabled={isPending && pendingAction === "send-message"}
-                />
-                <button
-                  type="submit"
-                  disabled={isPending && pendingAction === "send-message"}
-                  className={cn(buttonVariants({ size: "lg" }))}
-                >
-                  Send
-                  <SendHorizonalIcon className="size-4" />
-                </button>
-              </div>
-            </form>
-          </footer>
-        ) : null}
-      </section>
+                        ))
+                      ) : (
+                        <div className="rounded-[24px] border border-dashed border-hairline bg-surface/55 p-5 text-[13px] leading-6 text-tan">
+                          No polls yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              </>
+            ) : null}
+          </div>
+        </section>
+      </main>
 
       <aside className="space-y-4">
         <section className="do-panel p-5">
@@ -946,7 +1404,9 @@ function LiveChannelPageInner({
           </h3>
           <div className="mt-5 space-y-3 text-[13px] text-tan">
             <div className="rounded-2xl border border-hairline bg-surface/55 p-4">
-              {access === "public" ? "Anyone in the workspace can join." : "Approval is required to join."}
+              {access === "public"
+                ? "Anyone in the workspace can join."
+                : "Approval is required to join."}
             </div>
             {conversation.canManage ? (
               <div className="rounded-2xl border border-hairline bg-surface/55 p-4">
@@ -960,50 +1420,44 @@ function LiveChannelPageInner({
                 </span>
               </div>
             ) : null}
-            {viewerClubRole ? (
-              <span className="do-pill">Your role: {clubRoleLabel(viewerClubRole)}</span>
-            ) : null}
             {canJoin ? (
-              <Button
+              <ActionButton
+                label="Join club"
                 disabled={isPending && pendingAction === "join-open-club-side"}
                 onClick={() =>
                   runAction(
                     "join-open-club-side",
-                    () => joinOpenClub({ workspaceSlug, slug }),
+                    () => joinOpenClub({ workspaceSlug, slug: clubSlug }),
                     "You joined the club"
                   )
                 }
-              >
-                Join club
-              </Button>
+              />
             ) : canRequestToJoin ? (
-              <Button
+              <ActionButton
+                label="Request to join"
                 disabled={isPending && pendingAction === "request-to-join-side"}
                 onClick={() =>
                   runAction(
                     "request-to-join-side",
-                    () => requestToJoin({ workspaceSlug, slug }),
+                    () => requestToJoin({ workspaceSlug, slug: clubSlug }),
                     "Join request sent"
                   )
                 }
-              >
-                Request to join
-              </Button>
+              />
             ) : null}
             {canLeave ? (
-              <Button
+              <ActionButton
+                label="Leave club"
                 variant="outline"
                 disabled={isPending && pendingAction === "leave-channel"}
                 onClick={() =>
                   runAction(
                     "leave-channel",
-                    () => leaveChannel({ workspaceSlug, slug }),
+                    () => leaveChannel({ workspaceSlug, slug: clubSlug }),
                     "You left the club space"
                   )
                 }
-              >
-                Leave club
-              </Button>
+              />
             ) : null}
             {viewerMembershipState === "pending" ? (
               <span className="do-pill">Join request pending</span>
@@ -1013,13 +1467,27 @@ function LiveChannelPageInner({
 
         {!conversation.isGeneral ? (
           <section className="do-panel p-5">
-            <p className="do-eyebrow">Members</p>
-            <h3 className="mt-2 text-[20px] font-medium text-cream">
-              Roster
-            </h3>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="do-eyebrow">Members</p>
+                <h3 className="mt-2 text-[20px] font-medium text-cream">
+                  Enrolled roster
+                </h3>
+              </div>
+              <span className="do-pill">{filteredMembers.length}</span>
+            </div>
+            <div className="relative mt-5">
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tan" />
+              <Input
+                value={memberSearch}
+                onChange={(event) => setMemberSearch(event.target.value)}
+                placeholder="Search members by name or role"
+                className="pl-9"
+              />
+            </div>
             <div className="mt-5 space-y-3">
-              {members.length ? (
-                members.map((member) => (
+              {filteredMembers.length ? (
+                filteredMembers.map((member) => (
                   <div key={member.id} className="do-card p-4">
                     <div className="flex items-start gap-3">
                       <button
@@ -1036,7 +1504,9 @@ function LiveChannelPageInner({
                               {member.name}
                             </p>
                             <span className="do-pill">{clubRoleLabel(member.role)}</span>
-                            {member.isCurrentUser ? <span className="do-pill">You</span> : null}
+                            {member.isCurrentUser ? (
+                              <span className="do-pill">You</span>
+                            ) : null}
                           </div>
                           <p className="mt-1 text-[12px] leading-6 text-tan">
                             Joined {formatShortDate(member.joinedAt)}
@@ -1054,9 +1524,12 @@ function LiveChannelPageInner({
                                   () =>
                                     setMemberRole({
                                       workspaceSlug,
-                                      slug,
+                                      slug: clubSlug,
                                       userId: member.id,
-                                      role: event.target.value as "owner" | "officer" | "member",
+                                      role: event.target.value as
+                                        | "owner"
+                                        | "officer"
+                                        | "member",
                                     }),
                                   "Club role updated"
                                 )
@@ -1079,7 +1552,7 @@ function LiveChannelPageInner({
                                 () =>
                                   removeMember({
                                     workspaceSlug,
-                                    slug,
+                                    slug: clubSlug,
                                     userId: member.id,
                                   }),
                                 "Member removed"
@@ -1096,7 +1569,7 @@ function LiveChannelPageInner({
                 ))
               ) : (
                 <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] text-tan">
-                  No members yet.
+                  {members.length ? "No members match this search." : "No members yet."}
                 </div>
               )}
             </div>
@@ -1139,7 +1612,7 @@ function LiveChannelPageInner({
                           () =>
                             reviewJoinRequest({
                               workspaceSlug,
-                              slug,
+                              slug: clubSlug,
                               userId: request.userId,
                               approve: true,
                             }),
@@ -1160,7 +1633,7 @@ function LiveChannelPageInner({
                           () =>
                             reviewJoinRequest({
                               workspaceSlug,
-                              slug,
+                              slug: clubSlug,
                               userId: request.userId,
                               approve: false,
                             }),

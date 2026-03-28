@@ -6,6 +6,13 @@ export default async function ChannelPage({
   params: Promise<{ workspaceSlug: string; slug: string[] }>
 }) {
   const { workspaceSlug, slug } = await params
+  const [clubSlug, sectionSlug] = slug
 
-  return <LiveChannelPage workspaceSlug={workspaceSlug} slug={slug.join("/")} />
+  return (
+    <LiveChannelPage
+      workspaceSlug={workspaceSlug}
+      clubSlug={clubSlug}
+      sectionSlug={sectionSlug}
+    />
+  )
 }

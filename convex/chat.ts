@@ -16,6 +16,36 @@ type ClubRole = "owner" | "officer" | "member"
 type MembershipState = "public" | "admin" | "owner" | "officer" | "member" | "pending" | "notMember"
 const liveStatus = v.union(v.literal("open"), v.literal("closed"))
 const ticketCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+const campusFeedDiscussionSection = {
+  slug: "feed",
+  name: "Campus Feed",
+  description: "Workspace-wide announcements and updates for everyone.",
+} as const
+const defaultDiscussionSectionSeed = [
+  {
+    slug: "announcements",
+    name: "Announcements",
+    description: "Official updates from club leads, officers, and organizers.",
+  },
+  {
+    slug: "general",
+    name: "General",
+    description: "Day-to-day club conversation, intros, and member chat.",
+  },
+  {
+    slug: "events",
+    name: "Events",
+    description: "Planning details, reminders, and event-day coordination.",
+  },
+] as const
+
+type DiscussionSectionSnapshot = {
+  id: string | null
+  slug: string
+  name: string
+  description: string | null
+  position: number
+}
 
 function normalizeChannelName(value: string) {
   return value.trim().replace(/\s+/g, " ")
@@ -29,9 +59,21 @@ function createChannelSlug(name: string) {
     .slice(0, 48)
 }
 
+function createDiscussionSectionSlug(name: string) {
+  return normalizeChannelName(name)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32)
+}
+
 function normalizeOptionalString(value: string | undefined) {
   const trimmed = value?.trim() ?? ""
   return trimmed.length ? trimmed : undefined
+}
+
+function normalizeDiscussionSectionName(value: string) {
+  return normalizeChannelName(value).slice(0, 40)
 }
 
 function createOptionId(label: string, index: number) {
@@ -187,6 +229,127 @@ async function listConversationMembershipDocs(
     .query("conversationMembers")
     .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
     .collect()
+}
+
+async function listStoredDiscussionSections(
+  ctx: ReadCtx | MutationCtx,
+  conversationId: Id<"conversations">
+) {
+  return await ctx.db
+    .query("clubDiscussionSections")
+    .withIndex("by_conversation_and_position", (q) =>
+      q.eq("conversationId", conversationId)
+    )
+    .collect()
+}
+
+async function ensureStoredDiscussionSections(
+  ctx: MutationCtx,
+  workspaceId: Id<"workspaces">,
+  conversation: Doc<"conversations">,
+  createdByUserId?: Id<"users">
+) {
+  if (conversation.slug === "general") {
+    return []
+  }
+
+  const existing = await listStoredDiscussionSections(ctx, conversation._id)
+
+  if (existing.length) {
+    return existing
+  }
+
+  const now = Date.now()
+
+  for (const [position, section] of defaultDiscussionSectionSeed.entries()) {
+    await ctx.db.insert("clubDiscussionSections", {
+      workspaceId,
+      conversationId: conversation._id,
+      slug: section.slug,
+      name: section.name,
+      description: section.description,
+      position,
+      createdAt: now + position,
+      createdByUserId,
+    })
+  }
+
+  return await listStoredDiscussionSections(ctx, conversation._id)
+}
+
+async function listDiscussionSectionSnapshots(
+  ctx: ReadCtx | MutationCtx,
+  conversation: Doc<"conversations">
+): Promise<DiscussionSectionSnapshot[]> {
+  if (conversation.slug === "general") {
+    return [
+      {
+        id: null,
+        slug: campusFeedDiscussionSection.slug,
+        name: campusFeedDiscussionSection.name,
+        description: campusFeedDiscussionSection.description,
+        position: 0,
+      },
+    ]
+  }
+
+  const storedSections = await listStoredDiscussionSections(ctx, conversation._id)
+
+  if (storedSections.length) {
+    return storedSections.map((section) => ({
+      id: String(section._id),
+      slug: section.slug,
+      name: section.name,
+      description: section.description ?? null,
+      position: section.position,
+    }))
+  }
+
+  return defaultDiscussionSectionSeed.map((section, index) => ({
+    id: null,
+    slug: section.slug,
+    name: section.name,
+    description: section.description,
+    position: index,
+  }))
+}
+
+async function createUniqueDiscussionSectionSlug(
+  ctx: ReadCtx | MutationCtx,
+  conversationId: Id<"conversations">,
+  name: string
+) {
+  const reserved = new Set<string>(
+    defaultDiscussionSectionSeed.map((section) => section.slug)
+  )
+  const storedSections = await listStoredDiscussionSections(ctx, conversationId)
+
+  for (const section of storedSections) {
+    reserved.add(section.slug)
+  }
+
+  const base = createDiscussionSectionSlug(name) || "section"
+  let slug = base
+  let suffix = 2
+
+  while (reserved.has(slug)) {
+    slug = `${base}-${suffix}`.slice(0, 32)
+    suffix += 1
+  }
+
+  return slug
+}
+
+function selectDiscussionSection(
+  sections: DiscussionSectionSnapshot[],
+  requestedSlug?: string
+) {
+  return (
+    sections.find((section) => section.slug === requestedSlug) ??
+    sections.find((section) => section.slug === "general") ??
+    sections[0] ??
+    null
+  )
 }
 
 async function upsertConversationMembership(
@@ -628,6 +791,39 @@ export const conversation = queryGeneric({
       workspaceRole,
       clubRole: viewerClubRole,
     })
+    const discussionSections = await listDiscussionSectionSnapshots(ctx, convo)
+    const sectionStats = new Map<string, { messageCount: number; lastMessageAt: number | null }>()
+
+    if (canViewMessages) {
+      const allMessages = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation_and_created_at", (q) =>
+          q.eq("conversationId", convo._id)
+        )
+        .collect()
+
+      for (const message of allMessages) {
+        const fallbackSectionSlug = message.sectionId
+          ? null
+          : convo.slug === "general"
+            ? campusFeedDiscussionSection.slug
+            : "general"
+        const matchedSection = message.sectionId
+          ? discussionSections.find((section) => section.id === String(message.sectionId))
+          : discussionSections.find((section) => section.slug === fallbackSectionSlug)
+
+        if (!matchedSection) {
+          continue
+        }
+
+        const current = sectionStats.get(matchedSection.slug)
+
+        sectionStats.set(matchedSection.slug, {
+          messageCount: (current?.messageCount ?? 0) + 1,
+          lastMessageAt: Math.max(current?.lastMessageAt ?? 0, message.createdAt),
+        })
+      }
+    }
     const members =
       convo.slug === "general"
         ? []
@@ -671,6 +867,14 @@ export const conversation = queryGeneric({
         convo.slug !== "general" &&
         viewerClubRole !== null &&
         (access === "public" || workspaceRole !== "admin"),
+      discussionSections: discussionSections.map((section) => ({
+        id: section.id,
+        slug: section.slug,
+        name: section.name,
+        description: section.description,
+        messageCount: sectionStats.get(section.slug)?.messageCount ?? 0,
+        lastMessageAt: sectionStats.get(section.slug)?.lastMessageAt ?? null,
+      })),
       members,
       pendingRequests,
     }
@@ -681,6 +885,7 @@ export const listMessages = queryGeneric({
   args: {
     workspaceSlug: v.string(),
     slug: v.string(),
+    sectionSlug: v.optional(v.string()),
   },
   handler: async (ctx: ReadCtx, args) => {
     const identity = await requireIdentity(ctx)
@@ -721,9 +926,23 @@ export const listMessages = queryGeneric({
         q.eq("conversationId", convo._id)
       )
       .collect()
+    const discussionSections = await listDiscussionSectionSnapshots(ctx, convo)
+    const selectedSection = selectDiscussionSection(discussionSections, args.sectionSlug)
+
+    if (!selectedSection) {
+      return []
+    }
 
     return await Promise.all(
-      messages.map(async (message) => {
+      messages
+        .filter((message) => {
+          if (!message.sectionId) {
+            return selectedSection.slug === "general" || selectedSection.slug === "feed"
+          }
+
+          return String(message.sectionId) === selectedSection.id
+        })
+        .map(async (message) => {
         const author = await ctx.db.get(message.authorId)
 
         return {
@@ -737,7 +956,7 @@ export const listMessages = queryGeneric({
             isCurrentUser: author?.externalId === identity.subject,
           },
         }
-      })
+        })
     )
   },
 })
@@ -986,6 +1205,10 @@ export const createClubEvent = mutationGeneric({
 
     if (!convo) {
       throw new Error("Club space not found.")
+    }
+
+    if (convo.slug === "general") {
+      throw new Error("Campus Feed does not support custom discussion sections.")
     }
 
     const manager = await requireConversationManager(ctx, workspace, convo)
@@ -1430,8 +1653,73 @@ export const createChannel = mutationGeneric({
       role: "owner",
     })
 
+    await ensureStoredDiscussionSections(ctx, workspace._id, conversation, user._id)
+
     return {
       channelId: String(conversationId),
+      slug,
+    }
+  },
+})
+
+export const createDiscussionSection = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    const manager = await requireConversationManager(ctx, workspace, convo)
+    const name = normalizeDiscussionSectionName(args.name)
+    const description = normalizeOptionalString(args.description)
+
+    if (name.length < 2) {
+      throw new Error("Section name must be at least 2 characters long.")
+    }
+
+    if (name.length > 40) {
+      throw new Error("Section name must be 40 characters or fewer.")
+    }
+
+    if (description && description.length > 140) {
+      throw new Error("Section description must be 140 characters or fewer.")
+    }
+
+    const existingSections = await ensureStoredDiscussionSections(
+      ctx,
+      workspace._id,
+      convo,
+      manager.user._id
+    )
+    const slug = await createUniqueDiscussionSectionSlug(ctx, convo._id, name)
+    const sectionId = await ctx.db.insert("clubDiscussionSections", {
+      workspaceId: workspace._id,
+      conversationId: convo._id,
+      slug,
+      name,
+      description,
+      position: existingSections.length,
+      createdAt: Date.now(),
+      createdByUserId: manager.user._id,
+    })
+
+    return {
+      sectionId: String(sectionId),
       slug,
     }
   },
@@ -1770,6 +2058,7 @@ export const sendMessage = mutationGeneric({
   args: {
     workspaceSlug: v.string(),
     slug: v.string(),
+    sectionSlug: v.optional(v.string()),
     body: v.string(),
   },
   handler: async (ctx: MutationCtx, args) => {
@@ -1812,9 +2101,26 @@ export const sendMessage = mutationGeneric({
       throw new Error("Join this club space before posting in it.")
     }
 
+    const discussionSections =
+      convo.slug === "general"
+        ? []
+        : await ensureStoredDiscussionSections(ctx, workspace._id, convo, user._id)
+    const selectedSection =
+      convo.slug === "general"
+        ? null
+        : discussionSections.find((section) => section.slug === args.sectionSlug) ??
+          discussionSections.find((section) => section.slug === "general") ??
+          discussionSections[0] ??
+          null
+
+    if (convo.slug !== "general" && !selectedSection) {
+      throw new Error("This club does not have a discussion section yet.")
+    }
+
     await ctx.db.insert("messages", {
       workspaceId: workspace._id,
       conversationId: convo._id,
+      sectionId: selectedSection?._id,
       authorId: user._id,
       body: trimmed,
       createdAt: Date.now(),

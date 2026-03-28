@@ -93,9 +93,23 @@ export default defineSchema({
     .index("by_conversation_and_user", ["conversationId", "userId"])
     .index("by_conversation_and_status", ["conversationId", "status"]),
 
+  clubDiscussionSections: defineTable({
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    slug: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    position: v.number(),
+    createdAt: v.number(),
+    createdByUserId: v.optional(v.id("users")),
+  })
+    .index("by_conversation_and_slug", ["conversationId", "slug"])
+    .index("by_conversation_and_position", ["conversationId", "position"]),
+
   messages: defineTable({
     workspaceId: v.id("workspaces"),
     conversationId: v.id("conversations"),
+    sectionId: v.optional(v.id("clubDiscussionSections")),
     authorId: v.id("users"),
     body: v.string(),
     createdAt: v.number(),
@@ -124,16 +138,6 @@ export default defineSchema({
   })
     .index("by_workspace_and_slug", ["workspaceId", "slug"])
     .index("by_workspace_and_order", ["workspaceId", "order"]),
-
-  documents: defineTable({
-    workspaceId: v.id("workspaces"),
-    slug: v.string(),
-    title: v.string(),
-    summary: v.string(),
-    tag: v.string(),
-    updatedAt: v.number(),
-    ownerName: v.string(),
-  }).index("by_workspace_and_updated_at", ["workspaceId", "updatedAt"]),
 
   tasks: defineTable({
     workspaceId: v.id("workspaces"),
@@ -192,35 +196,6 @@ export default defineSchema({
     .index("by_workspace_and_code", ["workspaceId", "code"])
     .index("by_user_and_created_at", ["userId", "createdAt"]),
 
-  gatePasses: defineTable({
-    workspaceId: v.id("workspaces"),
-    code: v.string(),
-    attendeeName: v.string(),
-    attendeeEmail: v.optional(v.string()),
-    note: v.optional(v.string()),
-    createdAt: v.number(),
-    createdByUserId: v.id("users"),
-    checkedInAt: v.optional(v.number()),
-    checkedInByUserId: v.optional(v.id("users")),
-  })
-    .index("by_workspace_and_created_at", ["workspaceId", "createdAt"])
-    .index("by_workspace_and_code", ["workspaceId", "code"]),
-
-  polls: defineTable({
-    workspaceId: v.id("workspaces"),
-    question: v.string(),
-    description: v.optional(v.string()),
-    status: pollStatus,
-    options: v.array(
-      v.object({
-        id: v.string(),
-        label: v.string(),
-      })
-    ),
-    createdAt: v.number(),
-    createdByUserId: v.id("users"),
-  }).index("by_workspace_and_created_at", ["workspaceId", "createdAt"]),
-
   clubPolls: defineTable({
     workspaceId: v.id("workspaces"),
     conversationId: v.id("conversations"),
@@ -248,23 +223,4 @@ export default defineSchema({
   })
     .index("by_poll_and_user", ["pollId", "userId"])
     .index("by_poll", ["pollId"]),
-
-  pollVotes: defineTable({
-    workspaceId: v.id("workspaces"),
-    pollId: v.id("polls"),
-    userId: v.id("users"),
-    optionId: v.string(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_poll_and_user", ["pollId", "userId"])
-    .index("by_poll", ["pollId"]),
-
-  whiteboardSessions: defineTable({
-    workspaceId: v.id("workspaces"),
-    title: v.string(),
-    collaborators: v.number(),
-    note: v.string(),
-    order: v.number(),
-  }).index("by_workspace_and_order", ["workspaceId", "order"]),
 })

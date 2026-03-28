@@ -2,7 +2,6 @@ import { channelsSection } from "@/modules/channels/manifest"
 import { dashboardSection } from "@/modules/dashboard/manifest"
 import { eventsSection } from "@/modules/events/manifest"
 import { projectsSection } from "@/modules/projects/manifest"
-import { whiteboardSection } from "@/modules/whiteboard/manifest"
 
 import type { WorkspaceSection } from "@/modules/workspace/section"
 
@@ -11,7 +10,6 @@ export const workspaceSections = [
   channelsSection,
   projectsSection,
   eventsSection,
-  whiteboardSection,
 ] as const satisfies readonly WorkspaceSection[]
 
 export function getWorkspaceScopedPath(pathname: string, workspaceSlug: string) {

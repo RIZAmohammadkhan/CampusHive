@@ -7,7 +7,7 @@ export const channelsSection: WorkspaceSection = {
   href: "/channels",
   match: "prefix",
   navLabel: "Clubs",
-  title: "Club Spaces",
+  title: "Clubs",
   subtitle: "Browse and join clubs.",
   room: "clubs",
   icon: MessageSquareTextIcon,
