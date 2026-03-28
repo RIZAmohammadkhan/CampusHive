@@ -1045,8 +1045,38 @@ function EventWorkflowCard({
 
     return `${member.name} ${member.role}`.toLowerCase().includes(deferredMemberSearch)
   })
+  const isActionBusy = pendingAction !== null || isPending
+
+  useEffect(() => {
+    const pendingRequestIdSet = new Set(
+      event.pendingRequests.map((request) => request.ticketId)
+    )
+
+    setSelectedRequestIds((current) => {
+      const next = current.filter((ticketId) => pendingRequestIdSet.has(ticketId))
+      return next.length === current.length ? current : next
+    })
+  }, [event.pendingRequests])
+
+  useEffect(() => {
+    const attendeeUserIdSet = new Set(event.attendees.map((attendee) => attendee.userId))
+    const selectableMemberIdSet = new Set(
+      members
+        .filter((member) => !attendeeUserIdSet.has(member.id))
+        .map((member) => member.id)
+    )
+
+    setSelectedMemberIds((current) => {
+      const next = current.filter((userId) => selectableMemberIdSet.has(userId))
+      return next.length === current.length ? current : next
+    })
+  }, [event.attendees, members])
 
   const runAction = (key: string, action: () => Promise<void>) => {
+    if (pendingAction !== null) {
+      return
+    }
+
     setPendingAction(key)
 
     startTransition(async () => {
@@ -1130,6 +1160,10 @@ function EventWorkflowCard({
   }
 
   const handleVerifyTicket = () => {
+    if (pendingAction !== null || !verificationValue.trim()) {
+      return
+    }
+
     setPendingAction(`verify-${event.id}`)
 
     startTransition(async () => {
@@ -1218,7 +1252,7 @@ function EventWorkflowCard({
             </>
           ) : event.status === "open" && canParticipate ? (
             <Button
-              disabled={isPending && pendingAction === `request-${event.id}`}
+              disabled={isActionBusy}
               onClick={() =>
                 runAction(`request-${event.id}`, async () => {
                   await requestClubTicket({
@@ -1268,8 +1302,7 @@ function EventWorkflowCard({
                   <Button
                     size="sm"
                     disabled={
-                      selectedRequestIds.length === 0 ||
-                      (isPending && pendingAction === `approve-selected-${event.id}`)
+                      selectedRequestIds.length === 0 || isActionBusy
                     }
                     onClick={() =>
                       handleReviewRequests(
@@ -1284,9 +1317,7 @@ function EventWorkflowCard({
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={
-                      isPending && pendingAction === `approve-all-${event.id}`
-                    }
+                    disabled={isActionBusy}
                     onClick={() =>
                       handleReviewRequests(
                         event.pendingRequests.map((request) => request.ticketId),
@@ -1301,8 +1332,7 @@ function EventWorkflowCard({
                     size="sm"
                     variant="outline"
                     disabled={
-                      selectedRequestIds.length === 0 ||
-                      (isPending && pendingAction === `reject-selected-${event.id}`)
+                      selectedRequestIds.length === 0 || isActionBusy
                     }
                     onClick={() =>
                       handleReviewRequests(
@@ -1314,34 +1344,80 @@ function EventWorkflowCard({
                   >
                     Reject selected
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isActionBusy}
+                    onClick={() =>
+                      handleReviewRequests(
+                        event.pendingRequests.map((request) => request.ticketId),
+                        false,
+                        `reject-all-${event.id}`
+                      )
+                    }
+                  >
+                    Reject all
+                  </Button>
                 </div>
               </div>
 
               <div className="mt-4 space-y-3">
                 {event.pendingRequests.map((request) => (
-                  <label
+                  <div
                     key={request.ticketId}
-                    className="flex cursor-pointer items-start gap-3 rounded-[14px] border border-hairline bg-panel/60 p-3"
+                    className="flex flex-col gap-3 rounded-[14px] border border-hairline bg-panel/60 p-3 lg:flex-row lg:items-start lg:justify-between"
                   >
-                    <input
-                      type="checkbox"
-                      checked={selectedRequestIds.includes(request.ticketId)}
-                      onChange={() => toggleSelectedRequest(request.ticketId)}
-                      className="mt-1 size-4 rounded border-hairline bg-field"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <Link
-                        href={workspacePersonPath(workspaceSlug, request.userId)}
-                        className="block text-[14px] font-medium text-cream"
-                      >
-                        {request.name}
-                      </Link>
-                      <span className="mt-1 block text-[12px] leading-6 text-tan">
-                        {request.email ?? "No email synced"} · Requested{" "}
-                        {formatShortDate(request.createdAt)}
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedRequestIds.includes(request.ticketId)}
+                        onChange={() => toggleSelectedRequest(request.ticketId)}
+                        disabled={isActionBusy}
+                        className="mt-1 size-4 rounded border-hairline bg-field"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <Link
+                          href={workspacePersonPath(workspaceSlug, request.userId)}
+                          className="block text-[14px] font-medium text-cream"
+                        >
+                          {request.name}
+                        </Link>
+                        <span className="mt-1 block text-[12px] leading-6 text-tan">
+                          {request.email ?? "No email synced"} · Requested{" "}
+                          {formatShortDate(request.createdAt)}
+                        </span>
                       </span>
-                    </span>
-                  </label>
+                    </label>
+                    <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+                      <Button
+                        size="sm"
+                        disabled={isActionBusy}
+                        onClick={() =>
+                          handleReviewRequests(
+                            [request.ticketId],
+                            true,
+                            `approve-request-${request.ticketId}`
+                          )
+                        }
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isActionBusy}
+                        onClick={() =>
+                          handleReviewRequests(
+                            [request.ticketId],
+                            false,
+                            `reject-request-${request.ticketId}`
+                          )
+                        }
+                      >
+                        Decline
+                      </Button>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -1359,8 +1435,7 @@ function EventWorkflowCard({
                 <Button
                   size="sm"
                   disabled={
-                    selectedMemberIds.length === 0 ||
-                    (isPending && pendingAction === `issue-selected-${event.id}`)
+                    selectedMemberIds.length === 0 || isActionBusy
                   }
                   onClick={() =>
                     handleIssueTickets(
@@ -1374,7 +1449,7 @@ function EventWorkflowCard({
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={isPending && pendingAction === `issue-all-${event.id}`}
+                  disabled={isActionBusy}
                   onClick={() =>
                     handleIssueTickets(
                       members.map((member) => member.id),
@@ -1417,7 +1492,7 @@ function EventWorkflowCard({
                       type="checkbox"
                       checked={selectedMemberIds.includes(member.id)}
                       onChange={() => toggleSelectedMember(member.id)}
-                      disabled={disabled}
+                      disabled={disabled || isActionBusy}
                       className="mt-1 size-4 rounded border-hairline bg-field"
                     />
                     <span className="min-w-0 flex-1">
@@ -1454,10 +1529,7 @@ function EventWorkflowCard({
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
                 size="sm"
-                disabled={
-                  !verificationValue.trim() ||
-                  (isPending && pendingAction === `verify-${event.id}`)
-                }
+                disabled={!verificationValue.trim() || isActionBusy}
                 onClick={handleVerifyTicket}
               >
                 Verify
@@ -1466,6 +1538,7 @@ function EventWorkflowCard({
                 <Button
                   size="sm"
                   variant="outline"
+                  disabled={isActionBusy}
                   onClick={() => {
                     setVerificationValue("")
                     setVerificationResult(null)
@@ -1506,9 +1579,7 @@ function EventWorkflowCard({
                   <Button
                     size="sm"
                     className="mt-3"
-                    disabled={
-                      isPending && pendingAction === `verify-checkin-${event.id}`
-                    }
+                    disabled={isActionBusy}
                     onClick={() =>
                       runAction(`verify-checkin-${event.id}`, async () => {
                         await checkInClubTicket({
@@ -1571,10 +1642,7 @@ function EventWorkflowCard({
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={
-                            isPending &&
-                            pendingAction === `reset-ticket-${attendee.ticketId}`
-                          }
+                          disabled={isActionBusy}
                           onClick={() =>
                             runAction(`reset-ticket-${attendee.ticketId}`, async () => {
                               await resetClubTicket({
@@ -1591,10 +1659,7 @@ function EventWorkflowCard({
                       ) : (
                         <Button
                           size="sm"
-                          disabled={
-                            isPending &&
-                            pendingAction === `checkin-ticket-${attendee.ticketId}`
-                          }
+                          disabled={isActionBusy}
                           onClick={() =>
                             runAction(`checkin-ticket-${attendee.ticketId}`, async () => {
                               await checkInClubTicket({

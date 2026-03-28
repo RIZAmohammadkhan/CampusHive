@@ -557,6 +557,37 @@ async function countOwners(
   ).length
 }
 
+async function listConversationManagerUserIds(
+  ctx: ReadCtx | MutationCtx,
+  workspaceId: Id<"workspaces">,
+  conversation: Doc<"conversations">
+) {
+  const [workspaceAdmins, memberships] = await Promise.all([
+    ctx.db
+      .query("workspaceMembers")
+      .withIndex("by_workspace_and_role", (q) =>
+        q.eq("workspaceId", workspaceId).eq("role", "admin")
+      )
+      .collect(),
+    listConversationMembershipDocs(ctx, conversation._id),
+  ])
+  const managerEntries: Array<[string, Id<"users">]> = [
+    ...workspaceAdmins.map(
+      (membership): [string, Id<"users">] => [String(membership.userId), membership.userId]
+    ),
+    ...memberships
+      .filter((membership) => {
+        const role = resolveConversationMemberRole(conversation, membership)
+        return role === "owner" || role === "officer"
+      })
+      .map(
+        (membership): [string, Id<"users">] => [String(membership.userId), membership.userId]
+      ),
+  ]
+
+  return Array.from(new Map<string, Id<"users">>(managerEntries).values())
+}
+
 function canManageConversation({
   kind,
   workspaceRole,
@@ -1137,6 +1168,45 @@ async function approveClubEventTicketRecord(
     ticketId,
     code,
   }
+}
+
+async function notifyClubEventRequestReviewers(
+  ctx: MutationCtx,
+  {
+    workspace,
+    conversation,
+    event,
+    requesterUserId,
+    requesterName,
+  }: {
+    workspace: Doc<"workspaces">
+    conversation: Doc<"conversations">
+    event: Doc<"clubEvents">
+    requesterUserId: Id<"users">
+    requesterName: string
+  }
+) {
+  const reviewerUserIds = await listConversationManagerUserIds(
+    ctx,
+    workspace._id,
+    conversation
+  )
+
+  if (!reviewerUserIds.length) {
+    return
+  }
+
+  await createNotifications(ctx, {
+    workspaceId: workspace._id,
+    recipientUserIds: reviewerUserIds,
+    kind: "clubEvent",
+    title: `Ticket request for ${event.title}`,
+    body: `${requesterName} is waiting for approval · ${event.date} · ${event.time} · ${event.location}`,
+    route: `/channels/${conversation.slug}`,
+    actorUserId: requesterUserId,
+    conversationId: conversation._id,
+    eventId: event._id,
+  })
 }
 
 function parseTicketVerificationInput(value: string) {
@@ -2454,6 +2524,14 @@ export const joinClubEvent = mutationGeneric({
         checkedInByUserId: undefined,
       })
 
+      await notifyClubEventRequestReviewers(ctx, {
+        workspace,
+        conversation: convo,
+        event,
+        requesterUserId: user._id,
+        requesterName: getDisplayNameFromUser(user),
+      })
+
       return {
         ticketId: String(existingTicket._id),
         code: "",
@@ -2471,6 +2549,14 @@ export const joinClubEvent = mutationGeneric({
       source: "request",
       createdAt: now,
       updatedAt: now,
+    })
+
+    await notifyClubEventRequestReviewers(ctx, {
+      workspace,
+      conversation: convo,
+      event,
+      requesterUserId: user._id,
+      requesterName: getDisplayNameFromUser(user),
     })
 
     return {
@@ -2575,7 +2661,7 @@ export const issueClubTickets = mutationGeneric({
         recipientUserIds: notifiedUserIds,
         kind: "clubEvent",
         title: `Ticket issued for ${event.title}`,
-        body: `${event.date} · ${event.time} · ${event.location}`,
+        body: `Your pass is ready · ${event.date} · ${event.time} · ${event.location}`,
         route: `/tickets`,
         actorUserId: manager.user._id,
         conversationId: convo._id,
@@ -2701,7 +2787,9 @@ export const reviewClubEventRequests = mutationGeneric({
         title: args.approve
           ? `Ticket approved for ${event.title}`
           : `Ticket request declined for ${event.title}`,
-        body: `${event.date} · ${event.time} · ${event.location}`,
+        body: args.approve
+          ? `Your pass is ready · ${event.date} · ${event.time} · ${event.location}`
+          : `You can request again if space opens up · ${event.date} · ${event.time} · ${event.location}`,
         route: `/tickets`,
         actorUserId: manager.user._id,
         conversationId: convo._id,
