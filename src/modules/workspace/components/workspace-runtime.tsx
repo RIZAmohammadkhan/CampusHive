@@ -1,7 +1,7 @@
 "use client"
 
 import { useOrganization, useUser } from "@clerk/nextjs"
-import { useConvexAuth, useMutation } from "convex/react"
+import { useAction, useConvexAuth, useMutation } from "convex/react"
 import { usePathname } from "next/navigation"
 import { useEffect, useEffectEvent } from "react"
 
@@ -35,6 +35,18 @@ function debugNamePayload(user: ReturnType<typeof useUser>["user"]) {
   }
 }
 
+function buildUserSyncPayload(user: ReturnType<typeof useUser>["user"]) {
+  return {
+    userName:
+      normalizeOptionalString(user?.fullName) ??
+      normalizeOptionalString(user?.username),
+    userFirstName: normalizeOptionalString(user?.firstName),
+    userLastName: normalizeOptionalString(user?.lastName),
+    userEmail: normalizeOptionalString(user?.primaryEmailAddress?.emailAddress),
+    userImageUrl: normalizeOptionalString(user?.imageUrl),
+  }
+}
+
 function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
   const pathname = usePathname() ?? `/w/${workspaceSlug}`
   const { organization } = useOrganization()
@@ -42,6 +54,9 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
   const { isAuthenticated, isLoading } = useConvexAuth()
   const bootstrapWorkspace = useMutation(workspaceApi.bootstrap)
   const heartbeat = useMutation(presenceApi.heartbeat)
+  const repairMemberProfilesFromClerk = useAction(
+    workspaceApi.repairMemberProfilesFromClerk
+  )
   const scopedPath = getWorkspaceScopedPath(pathname, workspaceSlug)
 
   const runBootstrap = useEffectEvent(async () => {
@@ -53,13 +68,7 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
       clerkOrgId: organization.id,
       slug: organization.slug ?? workspaceSlug,
       name: organization.name,
-      userName:
-        normalizeOptionalString(user.fullName) ??
-        normalizeOptionalString(user.username),
-      userFirstName: normalizeOptionalString(user.firstName),
-      userLastName: normalizeOptionalString(user.lastName),
-      userEmail: normalizeOptionalString(user.primaryEmailAddress?.emailAddress),
-      userImageUrl: normalizeOptionalString(user.imageUrl),
+      ...buildUserSyncPayload(user),
     }
 
     console.groupCollapsed("[auth-debug] Clerk -> Convex bootstrap")
@@ -96,7 +105,27 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
       workspaceSlug,
       route: scopedPath,
       room: getWorkspaceRoom(pathname, workspaceSlug),
+      ...buildUserSyncPayload(user),
     })
+  })
+
+  const runMemberRepair = useEffectEvent(async () => {
+    if (!isLoaded || !isAuthenticated || !organization || !user) {
+      return
+    }
+
+    const storageKey = `workspace-member-repair:${organization.id}:${workspaceSlug}`
+
+    if (window.sessionStorage.getItem(storageKey) === "done") {
+      return
+    }
+
+    try {
+      await repairMemberProfilesFromClerk({ workspaceSlug })
+      window.sessionStorage.setItem(storageKey, "done")
+    } catch (error) {
+      console.error("[auth-debug] member repair failed", error)
+    }
   })
 
   useEffect(() => {
@@ -105,6 +134,7 @@ function WorkspaceRuntimeInner({ workspaceSlug }: { workspaceSlug: string }) {
     }
 
     void runBootstrap()
+    void runMemberRepair()
   }, [
     workspaceSlug,
     organization?.id,

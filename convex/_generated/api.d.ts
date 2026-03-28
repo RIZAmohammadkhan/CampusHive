@@ -9,6 +9,7 @@
  */
 
 import type * as chat from "../chat.js";
+import type * as clerkSync from "../clerkSync.js";
 import type * as dashboard from "../dashboard.js";
 import type * as events from "../events.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -26,6 +27,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   chat: typeof chat;
+  clerkSync: typeof clerkSync;
   dashboard: typeof dashboard;
   events: typeof events;
   "lib/auth": typeof lib_auth;

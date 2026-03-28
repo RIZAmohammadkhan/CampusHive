@@ -38,6 +38,11 @@ export const heartbeat = mutationGeneric({
     workspaceSlug: v.string(),
     route: v.string(),
     room: v.string(),
+    userName: v.optional(v.string()),
+    userFirstName: v.optional(v.string()),
+    userLastName: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
+    userImageUrl: v.optional(v.string()),
   },
   handler: async (ctx: MutationCtx, args) => {
     const identity = await requireIdentity(ctx)
@@ -48,7 +53,13 @@ export const heartbeat = mutationGeneric({
       return null
     }
 
-    const { user } = await syncCurrentWorkspaceMember(ctx, workspace)
+    const { user } = await syncCurrentWorkspaceMember(ctx, workspace, {
+      name: args.userName,
+      firstName: args.userFirstName,
+      lastName: args.userLastName,
+      email: args.userEmail,
+      imageUrl: args.userImageUrl,
+    })
 
     const now = Date.now()
 

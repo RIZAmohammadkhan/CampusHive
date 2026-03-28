@@ -1,4 +1,4 @@
-import { mutationRef, queryRef } from "@/modules/core/convex/ref"
+import { actionRef, mutationRef, queryRef } from "@/modules/core/convex/ref"
 
 export type ViewerData = {
   workspaceId: string
@@ -73,4 +73,8 @@ export const workspaceApi = {
     { workspaceSlug: string; userId: string },
     MemberProfileData | null
   >("workspaces:memberProfile"),
+  repairMemberProfilesFromClerk: actionRef<
+    { workspaceSlug: string },
+    { repairedCount: number }
+  >("clerkSync:repairMemberProfilesFromClerk"),
 }

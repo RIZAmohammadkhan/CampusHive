@@ -11,7 +11,16 @@ export type PresenceData = Array<{
 
 export const presenceApi = {
   heartbeat: mutationRef<
-    { workspaceSlug: string; route: string; room: string },
+    {
+      workspaceSlug: string
+      route: string
+      room: string
+      userName?: string
+      userFirstName?: string
+      userLastName?: string
+      userEmail?: string
+      userImageUrl?: string
+    },
     null
   >("presence:heartbeat"),
   listActive: queryRef<{ workspaceSlug: string }, PresenceData>(

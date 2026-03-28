@@ -1,12 +1,18 @@
-import { mutationGeneric, queryGeneric } from "convex/server"
+import {
+  internalMutationGeneric,
+  mutationGeneric,
+  queryGeneric,
+} from "convex/server"
 import { v } from "convex/values"
 
 import {
   assertActiveOrganization,
   getDisplayNameFromUser,
+  getUserByExternalId,
   getWorkspaceViewer,
   requireIdentity,
   syncCurrentWorkspaceMember,
+  upsertUser,
 } from "./lib/auth"
 import {
   cleanupLegacyWorkspaceDemoData,
@@ -291,5 +297,80 @@ export const memberProfile = queryGeneric({
       clubMemberships,
       eventTickets,
     }
+  },
+})
+
+export const applyClerkMemberProfiles = internalMutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    profiles: v.array(
+      v.object({
+        externalId: v.string(),
+        name: v.optional(v.string()),
+        firstName: v.optional(v.string()),
+        lastName: v.optional(v.string()),
+        email: v.optional(v.string()),
+        imageUrl: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      return 0
+    }
+
+    const members = await ctx.db
+      .query("workspaceMembers")
+      .withIndex("by_workspace_and_role", (q) => q.eq("workspaceId", workspace._id))
+      .collect()
+    const memberUsers = await Promise.all(
+      members.map(async (member) => await ctx.db.get(member.userId))
+    )
+    const memberExternalIds = new Set(
+      memberUsers
+        .map((user) => user?.externalId)
+        .filter((value): value is string => Boolean(value))
+    )
+
+    let repairedCount = 0
+
+    for (const profile of args.profiles) {
+      if (!memberExternalIds.has(profile.externalId)) {
+        continue
+      }
+
+      const existing = await getUserByExternalId(ctx, profile.externalId)
+
+      if (!existing) {
+        continue
+      }
+
+      const before = getDisplayNameFromUser(existing)
+      const updated = await upsertUser(ctx, {
+        externalId: profile.externalId,
+        name: profile.name,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        email: profile.email,
+        imageUrl: profile.imageUrl,
+        tokenIdentifier: existing.tokenIdentifier,
+        isSeed: existing.isSeed,
+      })
+      const after = getDisplayNameFromUser(updated)
+
+      if (
+        before !== after ||
+        existing.email !== updated.email ||
+        existing.firstName !== updated.firstName ||
+        existing.lastName !== updated.lastName ||
+        existing.imageUrl !== updated.imageUrl
+      ) {
+        repairedCount += 1
+      }
+    }
+
+    return repairedCount
   },
 })
