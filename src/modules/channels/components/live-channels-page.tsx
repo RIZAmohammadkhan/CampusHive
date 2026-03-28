@@ -22,8 +22,12 @@ import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { workspacePath } from "@/lib/workspaces"
+import {
+  workspaceClubDiscussionPath,
+  workspaceClubPath,
+} from "@/lib/workspaces"
 import { channelsApi, type ChannelListData } from "@/modules/channels/api"
+import { defaultDiscussionSlug } from "@/modules/channels/components/conversation-utils"
 import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
 
 const clubCategories = [
@@ -181,10 +185,10 @@ function ClubDirectoryCard({
 
         <div className="flex flex-wrap gap-2">
           <Link
-            href={workspacePath(workspaceSlug, `/channels/${club.slug}`)}
+            href={workspaceClubPath(workspaceSlug, club.slug)}
             className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
           >
-            Club details
+            Club profile
           </Link>
           {club.canJoin ? (
             <Button
@@ -196,7 +200,11 @@ function ClubDirectoryCard({
             </Button>
           ) : club.canOpen ? (
             <Link
-              href={workspacePath(workspaceSlug, `/channels/${club.slug}`)}
+              href={workspaceClubDiscussionPath(
+                workspaceSlug,
+                club.slug,
+                defaultDiscussionSlug(club.isGeneral)
+              )}
               className={cn(buttonVariants({ size: "sm" }))}
             >
               Open discussion
@@ -389,7 +397,7 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
         setAccess("members")
         setShowCreatePanel(false)
         toast.success("Club space created")
-        router.push(workspacePath(workspaceSlug, `/channels/${result.slug}`))
+        router.push(workspaceClubPath(workspaceSlug, result.slug))
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to create club space."
@@ -498,7 +506,11 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
             <div className="mt-5 space-y-2">
               {campusFeed ? (
                 <Link
-                  href={workspacePath(workspaceSlug, `/channels/${campusFeed.slug}`)}
+                  href={workspaceClubDiscussionPath(
+                    workspaceSlug,
+                    campusFeed.slug,
+                    defaultDiscussionSlug(campusFeed.isGeneral)
+                  )}
                   className={cn(buttonVariants({ variant: "outline" }), "w-full")}
                 >
                   Open feed

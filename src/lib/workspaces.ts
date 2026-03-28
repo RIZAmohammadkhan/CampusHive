@@ -13,3 +13,35 @@ export function workspacePath(workspaceSlug: string, path = "") {
 
   return `/w/${workspaceSlug}${normalizedPath}`
 }
+
+export function workspaceClubsPath(workspaceSlug: string) {
+  return workspacePath(workspaceSlug, "/channels")
+}
+
+export function workspaceClubPath(workspaceSlug: string, clubSlug: string) {
+  return workspacePath(workspaceSlug, `/channels/${clubSlug}`)
+}
+
+export function workspaceClubDiscussionPath(
+  workspaceSlug: string,
+  clubSlug: string,
+  sectionSlug: string
+) {
+  return workspacePath(workspaceSlug, `/channels/${clubSlug}/${sectionSlug}`)
+}
+
+export function workspaceMessagesPath(workspaceSlug: string) {
+  return workspacePath(workspaceSlug, "/messages")
+}
+
+export function workspaceMessagePath(workspaceSlug: string, dmSlug: string) {
+  return workspacePath(workspaceSlug, `/messages/${dmSlug}`)
+}
+
+export function workspacePeoplePath(workspaceSlug: string) {
+  return workspacePath(workspaceSlug, "/people")
+}
+
+export function workspacePersonPath(workspaceSlug: string, userId: string) {
+  return workspacePath(workspaceSlug, `/people/${userId}`)
+}

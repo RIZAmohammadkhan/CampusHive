@@ -1,7 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRightIcon, FolderKanbanIcon, MessageSquareTextIcon } from "lucide-react"
+import {
+  ArrowRightIcon,
+  FolderKanbanIcon,
+  MessageCircleIcon,
+  MessageSquareTextIcon,
+} from "lucide-react"
 import { useQuery } from "convex/react"
 
 import { ConvexAuthGate } from "@/components/convex/convex-auth-gate"
@@ -9,7 +14,13 @@ import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { ConvexSetupNotice } from "@/components/convex/convex-setup-notice"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { cn } from "@/lib/utils"
-import { workspacePath } from "@/lib/workspaces"
+import {
+  workspaceClubPath,
+  workspaceClubsPath,
+  workspaceMessagesPath,
+  workspacePersonPath,
+  workspacePath,
+} from "@/lib/workspaces"
 import { dashboardApi } from "@/modules/dashboard/api"
 import { PresenceDot } from "@/modules/presence/components/presence-dot"
 import { LiveLoadingState } from "@/modules/shared/components/live-loading-state"
@@ -77,8 +88,15 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
 
           <div className="flex flex-wrap gap-3">
             <Link
-              href={workspacePath(workspaceSlug, "/channels")}
+              href={workspaceMessagesPath(workspaceSlug)}
               className={cn(buttonVariants({ size: "lg" }))}
+            >
+              Messages
+              <MessageCircleIcon className="size-4" />
+            </Link>
+            <Link
+              href={workspaceClubsPath(workspaceSlug)}
+              className={cn(buttonVariants({ variant: "outline", size: "lg" }))}
             >
               Clubs
               <ArrowRightIcon className="size-4" />
@@ -128,7 +146,7 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
               {data.channels.map((channel) => (
                 <Link
                   key={channel.id}
-                  href={workspacePath(workspaceSlug, `/channels/${channel.slug}`)}
+                  href={workspaceClubPath(workspaceSlug, channel.slug)}
                   className="do-card block p-5 transition-colors duration-200 hover:border-ring"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -163,7 +181,11 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
             <div className="mt-5 space-y-3">
               {data.activeMembers.length ? (
                 data.activeMembers.map((member) => (
-                  <div key={member.id} className="do-card p-4">
+                  <Link
+                    key={member.id}
+                    href={workspacePersonPath(workspaceSlug, member.id)}
+                    className="do-card block p-4"
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-[15px] font-medium text-cream truncate">
@@ -179,7 +201,7 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
                         className="size-2.5"
                       />
                     </div>
-                  </div>
+                  </Link>
                 ))
               ) : (
                 <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-center text-[13px] text-tan">

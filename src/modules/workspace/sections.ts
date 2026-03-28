@@ -1,13 +1,17 @@
 import { channelsSection } from "@/modules/channels/manifest"
 import { dashboardSection } from "@/modules/dashboard/manifest"
 import { eventsSection } from "@/modules/events/manifest"
+import { messagesSection } from "@/modules/messages/manifest"
+import { peopleSection } from "@/modules/people/manifest"
 import { projectsSection } from "@/modules/projects/manifest"
 
 import type { WorkspaceSection } from "@/modules/workspace/section"
 
 export const workspaceSections = [
   dashboardSection,
+  messagesSection,
   channelsSection,
+  peopleSection,
   projectsSection,
   eventsSection,
 ] as const satisfies readonly WorkspaceSection[]

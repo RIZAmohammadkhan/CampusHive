@@ -10,7 +10,15 @@ import { toast } from "sonner"
 
 import { useConvexConfigured } from "@/components/convex/convex-client-provider"
 import { cn } from "@/lib/utils"
-import { workspacePath } from "@/lib/workspaces"
+import {
+  workspaceClubPath,
+  workspaceClubsPath,
+  workspaceMessagePath,
+  workspaceMessagesPath,
+  workspacePath,
+  workspacePeoplePath,
+  workspacePersonPath,
+} from "@/lib/workspaces"
 import { channelsApi, type ChannelListData } from "@/modules/channels/api"
 import { PresenceDot } from "@/modules/presence/components/presence-dot"
 import { workspaceApi } from "@/modules/workspace/api"
@@ -140,8 +148,12 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
   const peopleQuickActions =
     directoryData?.members.filter((member) => !member.isCurrentUser).slice(0, 4) ?? []
   const sectionBadges: Partial<Record<(typeof workspaceSections)[number]["id"], string>> = {
+    messages: unreadDirectMessages > 0 ? unreadDirectMessages.toString() : undefined,
     channels: totalClubs > 0 ? totalClubs.toString() : undefined,
-    dashboard: unreadDirectMessages > 0 ? unreadDirectMessages.toString() : undefined,
+    people:
+      directoryData?.members.length && directoryData.members.length > 0
+        ? directoryData.members.length.toString()
+        : undefined,
   }
 
   return (
@@ -191,7 +203,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
           </div>
           <div className="mt-2 space-y-0.5">
             <SidebarLink
-              href={workspacePath(workspaceSlug, "/channels")}
+              href={workspaceClubsPath(workspaceSlug)}
               match="prefix"
               icon={<MessageCircleIcon className="size-4" />}
               badge={totalClubs > 0 ? totalClubs.toString() : null}
@@ -203,7 +215,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
               memberClubs.slice(0, 5).map((channel) => (
                 <SidebarLink
                   key={channel.id}
-                  href={workspacePath(workspaceSlug, `/channels/${channel.slug}`)}
+                  href={workspaceClubPath(workspaceSlug, channel.slug)}
                   match="prefix"
                   badge={
                     channel.unreadCount > 0
@@ -223,7 +235,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
             ) : (
               <p className="mt-3 px-1 text-[12px] leading-6 text-tan">
                 {roleLabel === "College admin"
-                  ? "Create or join a club to pin it here."
+                  ? ""
                   : "Join a club to keep it close at hand."}
               </p>
             )}
@@ -247,7 +259,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
               directMessages.slice(0, 4).map((dm) => (
                 <SidebarLink
                   key={dm.id}
-                  href={workspacePath(workspaceSlug, `/channels/${dm.slug}`)}
+                  href={workspaceMessagePath(workspaceSlug, dm.slug)}
                   match="prefix"
                   icon={<MessageCircleIcon className="size-4" />}
                   badge={
@@ -264,9 +276,17 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
               ))
             ) : (
               <p className="mt-3 px-1 text-[12px] leading-6 text-tan">
-                Start a direct message from the people list.
+                Start a direct message from the people list or the messages page.
               </p>
             )}
+            <SidebarLink
+              href={workspaceMessagesPath(workspaceSlug)}
+              match="prefix"
+              icon={<MessageCircleIcon className="size-4" />}
+              secondary="Open your inbox"
+            >
+              View all messages
+            </SidebarLink>
           </div>
         </div>
 
@@ -282,50 +302,62 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
           <div className="mt-2 space-y-0.5">
             {peopleQuickActions.length ? (
               peopleQuickActions.map((member) => (
-                <button
-                  key={member.id}
-                  type="button"
-                  className="group flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.04]"
-                  onClick={async () => {
-                    try {
-                      const result = await createDirectMessage({
-                        workspaceSlug,
-                        userId: member.id,
-                      })
-                      router.push(
-                        workspacePath(workspaceSlug, `/channels/${result.slug}`)
-                      )
-                    } catch (error) {
-                      toast.error(
-                        error instanceof Error
-                          ? error.message
-                          : "Could not start that direct message."
-                      )
-                    }
-                  }}
-                >
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-hairline bg-elevated text-[12px] font-medium text-parchment">
-                    {member.name.charAt(0)}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12px] font-medium tracking-[0.03em] text-parchment">
-                      {member.name}
+                <div key={member.id} className="flex items-center gap-2">
+                  <Link
+                    href={workspacePersonPath(workspaceSlug, member.id)}
+                    className="group flex min-w-0 flex-1 items-center gap-3 rounded-[8px] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.04]"
+                  >
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-hairline bg-elevated text-[12px] font-medium text-parchment">
+                      {member.name.charAt(0)}
                     </span>
-                    <span className="mt-0.5 block text-[11px] text-tan">
-                      {member.role === "admin" ? "College admin" : "Student"}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] font-medium tracking-[0.03em] text-parchment">
+                        {member.name}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-tan">
+                        {member.role === "admin" ? "College admin" : "Student"}
+                      </span>
                     </span>
-                  </span>
-                  <PresenceDot
-                    status={member.isActive ? "online" : "offline"}
-                    className="size-2.5"
-                  />
-                </button>
+                    <PresenceDot
+                      status={member.isActive ? "online" : "offline"}
+                      className="size-2.5"
+                    />
+                  </Link>
+                  <button
+                    type="button"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-[8px] border border-hairline bg-elevated/92 text-tan transition-colors hover:border-white/10 hover:bg-white/[0.04] hover:text-parchment"
+                    onClick={async () => {
+                      try {
+                        const result = await createDirectMessage({
+                          workspaceSlug,
+                          userId: member.id,
+                        })
+                        router.push(workspaceMessagePath(workspaceSlug, result.slug))
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : "Could not start that direct message."
+                        )
+                      }
+                    }}
+                  >
+                    <MessageCircleIcon className="size-4" />
+                  </button>
+                </div>
               ))
             ) : (
               <p className="mt-3 px-1 text-[12px] leading-6 text-tan">
                 No members yet.
               </p>
             )}
+            <SidebarLink
+              href={workspacePeoplePath(workspaceSlug)}
+              match="prefix"
+              secondary="Browse full directory"
+            >
+              View all people
+            </SidebarLink>
           </div>
         </div>
 

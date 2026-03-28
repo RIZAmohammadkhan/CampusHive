@@ -2447,16 +2447,16 @@ export const sendMessage = mutationGeneric({
     if (convo.kind === "dm") {
       const memberships = await listConversationMembershipDocs(ctx, convo._id)
 
-      await createNotifications(ctx, {
-        workspaceId: workspace._id,
-        recipientUserIds: memberships.map((membership) => membership.userId),
-        kind: "dm",
-        title: `New message from ${getDisplayNameFromUser(user)}`,
-        body: trimmed,
-        route: `/channels/${convo.slug}`,
-        actorUserId: user._id,
-        conversationId: convo._id,
-      })
+    await createNotifications(ctx, {
+      workspaceId: workspace._id,
+      recipientUserIds: memberships.map((membership) => membership.userId),
+      kind: "dm",
+      title: `New message from ${getDisplayNameFromUser(user)}`,
+      body: trimmed,
+      route: `/messages/${convo.slug}`,
+      actorUserId: user._id,
+      conversationId: convo._id,
+    })
     } else {
       const mentionedUserIds = await findMentionedUserIds(
         ctx,

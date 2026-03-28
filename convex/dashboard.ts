@@ -88,8 +88,12 @@ export const office = queryGeneric({
           routeLabel: presence?.route
             ? presence.route === "/"
               ? "Hub"
+              : presence.route.startsWith("/messages")
+                ? "Messages"
               : presence.route.startsWith("/channels")
                   ? "Club spaces"
+                  : presence.route.startsWith("/people")
+                    ? "People"
                   : presence.route.startsWith("/projects")
                   ? "Tasks"
                   : presence.route.startsWith("/calendar")
