@@ -41,8 +41,8 @@ export function LiveOfficePage({ workspaceSlug }: { workspaceSlug: string }) {
   if (!enabled) {
     return (
       <ConvexSetupNotice
-        title="The campus hub needs a live Convex deployment."
-        body="Presence, club spaces, and event operations now come from Convex. Add your deployment URL and run the Convex dev process to make the campus fully interactive."
+        title="The campus hub needs Convex."
+        body="Add your deployment URL and run Convex to load live data."
       />
     )
   }
@@ -60,24 +60,19 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
   if (data === undefined || data === null) {
     return (
       <LiveLoadingState
-        title="Waking up the campus"
-        body="Gathering the latest club activity, event tasks, and online members."
+        title="Loading campus"
+        body="Syncing live activity."
       />
     )
   }
 
   return (
     <div className="space-y-6 lg:space-y-8">
-      <section className="do-surface p-6 md:p-8 lg:p-10">
-        <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
-          <div className="space-y-4 max-w-2xl">
-            <p className="do-eyebrow">CampusHive Hub</p>
-            <h2 className="do-heading">
-              Your college club command center.
-            </h2>
-            <p className="do-copy">
-              Start the day with club activity, live operations, and the communities students are actually showing up for.
-            </p>
+      <section className="do-surface p-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <p className="do-eyebrow">Overview</p>
+            <h2 className="mt-2 do-subheading">Everything important, at a glance.</h2>
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -85,21 +80,21 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
               href={workspacePath(workspaceSlug, "/channels")}
               className={cn(buttonVariants({ size: "lg" }))}
             >
-              Explore clubs
+              Clubs
               <ArrowRightIcon className="size-4" />
             </Link>
             <Link
               href={workspacePath(workspaceSlug, "/projects")}
               className={cn(buttonVariants({ variant: "outline", size: "lg" }))}
             >
-              Open event ops
+              Tasks
               <FolderKanbanIcon className="size-4" />
             </Link>
             <Link
               href={workspacePath(workspaceSlug, "/calendar")}
               className={cn(buttonVariants({ variant: "outline", size: "lg" }))}
             >
-              See events
+              Events
               <ArrowRightIcon className="size-4" />
             </Link>
           </div>
@@ -111,7 +106,6 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
           <div key={metric.label} className="do-card p-5">
             <p className="do-stat-label">{metric.label}</p>
             <p className="mt-4 do-stat-value">{metric.value}</p>
-            <p className="mt-2 text-[12px] leading-6 text-tan">{metric.detail}</p>
           </div>
         ))}
       </section>
@@ -120,8 +114,8 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
         <div className="space-y-4">
           <div className="flex items-end justify-between">
             <div>
-              <p className="do-eyebrow">Community Discovery</p>
-              <h3 className="mt-2 do-subheading">Active club spaces</h3>
+              <p className="do-eyebrow">Clubs</p>
+              <h3 className="mt-2 do-subheading">Active spaces</h3>
             </div>
             <span className="do-pill">
               <MessageSquareTextIcon className="size-3.5" />
@@ -143,7 +137,7 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
                       <p className="mt-1 text-[11px] tracking-[0.12em] text-tan uppercase">
                         {channel.category}
                       </p>
-                      <p className="mt-2 text-[13px] leading-6 text-tan line-clamp-2">
+                      <p className="mt-2 text-[13px] text-tan line-clamp-2">
                         {channel.description}
                       </p>
                     </div>
@@ -156,18 +150,16 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
               ))}
             </div>
           ) : (
-            <div className="do-panel p-6 text-[13px] leading-6 text-tan flex items-center justify-center min-h-[120px] text-center">
-              No active club spaces yet. When communities form, they will appear here.
+            <div className="do-panel flex min-h-[120px] items-center justify-center p-6 text-center text-[13px] text-tan">
+              No active club spaces yet.
             </div>
           )}
         </div>
 
         <aside className="space-y-6">
           <section className="do-panel p-5">
-            <p className="do-eyebrow">People Active Now</p>
-            <h3 className="mt-2 text-[20px] font-medium text-cream">
-              Live presence
-            </h3>
+            <p className="do-eyebrow">People</p>
+            <h3 className="mt-2 text-[20px] font-medium text-cream">Live now</h3>
             <div className="mt-5 space-y-3">
               {data.activeMembers.length ? (
                 data.activeMembers.map((member) => (
@@ -190,7 +182,7 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
                   </div>
                 ))
               ) : (
-                <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan text-center">
+                <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-center text-[13px] text-tan">
                   It&apos;s quiet right now.
                 </div>
               )}
@@ -198,10 +190,8 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
           </section>
 
           <section className="do-panel p-5">
-            <p className="do-eyebrow">Event Task Pulse</p>
-            <h3 className="mt-2 text-[20px] font-medium text-cream">
-              Recent operations
-            </h3>
+            <p className="do-eyebrow">Tasks</p>
+            <h3 className="mt-2 text-[20px] font-medium text-cream">Recent activity</h3>
             <div className="mt-5 space-y-3">
               {data.recentTasks.length ? (
                 data.recentTasks.map((task) => (
@@ -220,7 +210,7 @@ function LiveOfficePageInner({ workspaceSlug }: { workspaceSlug: string }) {
                   </div>
                 ))
               ) : (
-                <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan text-center">
+                <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-center text-[13px] text-tan">
                   No pending event tasks.
                 </div>
               )}

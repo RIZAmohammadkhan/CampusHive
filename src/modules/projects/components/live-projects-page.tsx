@@ -41,8 +41,8 @@ export function LiveProjectsPage({ workspaceSlug }: { workspaceSlug: string }) {
   if (!enabled) {
     return (
       <ConvexSetupNotice
-        title="Project persistence is handled by Convex."
-        body="The project board, assignees, and admin controls now depend on Convex so ownership can stay durable and collaborative."
+        title="Tasks need Convex."
+        body="Add your deployment URL and run Convex to load the board."
       />
     )
   }
@@ -73,8 +73,8 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   if (data === undefined || data === null) {
     return (
       <LiveLoadingState
-        title="Loading event ops board"
-        body="Convex is syncing event tasks, campus members, and assignment controls."
+        title="Loading tasks"
+        body="Syncing the board."
       />
     )
   }
@@ -156,31 +156,15 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
 
   return (
     <div className="space-y-6 lg:space-y-8">
-      <section className="do-surface p-6 md:p-8 lg:p-10">
-        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-4">
-            <p className="do-eyebrow">Event Operations</p>
-            <h2 className="do-heading max-w-3xl">
-              Give every campus event a live task board instead of a frantic group chat.
-            </h2>
-            <p className="max-w-2xl do-copy">
-              Institute admins can assign ownership, and everyone in the campus can
-              keep task state fresh as work gets acknowledged, completed, or flagged.
-            </p>
+      <section className="do-surface p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="do-eyebrow">Tasks</p>
+            <h2 className="mt-2 do-subheading">Event work in one board.</h2>
           </div>
-
-          <div className="do-panel p-5">
-            <p className="do-stat-label">How This Board Works</p>
-            <p className="mt-3 text-[22px] font-medium text-cream">
-              {data.canManage
-                ? "Create event tasks, assign owners, and keep the room aware of risk."
-                : "Task creation and assignment are managed by institute admins."}
-            </p>
-            <p className="mt-3 text-[13px] leading-6 text-tan">
-              Status changes are live for everyone in the campus space, so organizers
-              can spot blocked work before event day.
-            </p>
-          </div>
+          <span className="do-pill">
+            {data.canManage ? "Admin controls enabled" : "View and update status"}
+          </span>
         </div>
       </section>
 
@@ -193,7 +177,6 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
               <Icon className="size-4 text-slate" />
               <p className="mt-4 do-stat-label">{metric.label}</p>
               <p className="mt-3 do-stat-value">{metric.value}</p>
-              <p className="mt-2 text-[12px] leading-6 text-tan">{metric.detail}</p>
             </div>
           )
         })}
@@ -202,8 +185,8 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
       <section className="do-panel p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="do-eyebrow">Create Task</p>
-            <h3 className="mt-2 do-subheading">Add new event work to the board</h3>
+            <p className="do-eyebrow">New Task</p>
+            <h3 className="mt-2 do-subheading">Add work</h3>
           </div>
           {!data.canManage ? (
             <span className="do-pill">Institute admins only</span>
@@ -281,8 +264,8 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
 
       <section className="space-y-4">
         <div>
-          <p className="do-eyebrow">Board View</p>
-          <h3 className="mt-2 do-subheading">Live operations across the campus</h3>
+          <p className="do-eyebrow">Board</p>
+          <h3 className="mt-2 do-subheading">Current tasks</h3>
         </div>
 
         {data.columns.some((column) => column.cards.length > 0) ? (
@@ -372,9 +355,8 @@ function LiveProjectsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
             ))}
           </div>
         ) : (
-          <div className="do-panel p-6 text-[13px] leading-6 text-tan">
-            No event tasks have been created yet. Add the first task above to start
-            coordinating setup, volunteer handoff, and showtime execution.
+          <div className="do-panel p-6 text-[13px] text-tan">
+            No tasks yet.
           </div>
         )}
       </section>

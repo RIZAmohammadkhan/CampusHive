@@ -21,15 +21,10 @@ export function AppTopbar({ workspaceSlug }: AppTopbarProps) {
   const queryArgs = enabled && isAuthenticated ? { workspaceSlug } : "skip"
   const viewer = useQuery(workspaceApi.viewer, queryArgs)
   const content = getWorkspaceSection(pathname, workspaceSlug) ?? {
-    title: "Campus Space",
-    subtitle: "Live campus data is loaded for the current organization.",
+    title: "Workspace",
+    subtitle: "Live campus data.",
   }
   const { organization } = useOrganization()
-  const today = new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  }).format(new Date())
   const roleLabel =
     viewer?.role === "admin"
       ? "College admin"
@@ -39,35 +34,30 @@ export function AppTopbar({ workspaceSlug }: AppTopbarProps) {
 
   return (
     <header className="sticky top-0 z-20 border-b border-hairline/80 bg-background/60 backdrop-blur-2xl">
-      <div className="mx-auto flex w-full max-w-[1320px] flex-col gap-4 px-4 py-4 md:px-6 lg:px-8">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="do-pill">{organization?.slug ?? workspaceSlug}</span>
-              <span className="do-pill">{today}</span>
-              <span className="do-pill">
-                <ShieldCheckIcon className="size-3.5" />
-                {roleLabel}
-              </span>
-            </div>
-            <div>
-              <h1 className="font-display text-[26px] leading-none text-cream">
-                {content.title}
-              </h1>
-              <p className="mt-2 max-w-2xl text-[13px] leading-6 text-tan">
-                {content.subtitle}
-              </p>
-            </div>
-          </div>
-
+      <div className="mx-auto flex w-full max-w-[1320px] items-center justify-between gap-4 px-4 py-4 md:px-6 lg:px-8">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <OrganizationSwitcher
-              hidePersonal
-              afterCreateOrganizationUrl={WORKSPACE_HOME_PATTERN}
-              afterSelectOrganizationUrl={WORKSPACE_HOME_PATTERN}
-            />
-            <UserButton />
+            <span className="do-pill">{organization?.slug ?? workspaceSlug}</span>
+            <span className="do-pill">
+              <ShieldCheckIcon className="size-3.5" />
+              {roleLabel}
+            </span>
           </div>
+          <div className="mt-3">
+            <h1 className="truncate text-[22px] font-medium text-cream">
+              {content.title}
+            </h1>
+            <p className="mt-1 text-[12px] text-tan">{content.subtitle}</p>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <OrganizationSwitcher
+            hidePersonal
+            afterCreateOrganizationUrl={WORKSPACE_HOME_PATTERN}
+            afterSelectOrganizationUrl={WORKSPACE_HOME_PATTERN}
+          />
+          <UserButton />
         </div>
       </div>
     </header>

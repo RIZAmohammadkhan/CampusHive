@@ -89,9 +89,7 @@ export const office = queryGeneric({
                   ? "Event ops"
                   : presence.route.startsWith("/calendar")
                     ? "Events"
-                    : presence.route.startsWith("/docs")
-                      ? "Resources"
-                      : presence.route.startsWith("/whiteboard")
+                    : presence.route.startsWith("/whiteboard")
                         ? "Gate & polls"
                         : "Campus space"
             : null,

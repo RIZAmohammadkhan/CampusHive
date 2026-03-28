@@ -1,4 +1,6 @@
-import { LiveDocsPage } from "@/modules/resources/components/live-docs-page"
+import { redirect } from "next/navigation"
+
+import { workspacePath } from "@/lib/workspaces"
 
 export default async function DocsPage({
   params,
@@ -7,5 +9,5 @@ export default async function DocsPage({
 }) {
   const { workspaceSlug } = await params
 
-  return <LiveDocsPage workspaceSlug={workspaceSlug} />
+  redirect(workspacePath(workspaceSlug))
 }

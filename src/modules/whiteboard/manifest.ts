@@ -8,8 +8,7 @@ export const whiteboardSection: WorkspaceSection = {
   match: "prefix",
   navLabel: "Gate & Polls",
   title: "Gate & Polls",
-  subtitle:
-    "Operational views for passes, scan desks, decisions, and quiet notifications.",
+  subtitle: "Passes, check-ins, and polls.",
   room: "gate-ops",
   icon: ScanLineIcon,
 }

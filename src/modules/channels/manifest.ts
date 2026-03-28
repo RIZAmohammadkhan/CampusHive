@@ -8,8 +8,7 @@ export const channelsSection: WorkspaceSection = {
   match: "prefix",
   navLabel: "Clubs",
   title: "Club Spaces",
-  subtitle:
-    "Browse communities, open shared channels, and keep announcements visible.",
+  subtitle: "Browse and join clubs.",
   room: "clubs",
   icon: MessageSquareTextIcon,
 }

@@ -30,8 +30,8 @@ export function LiveCalendarPage({ workspaceSlug }: { workspaceSlug: string }) {
   if (!enabled) {
     return (
       <ConvexSetupNotice
-        title="Campus events need a live Convex deployment."
-        body="Shared scheduling, event creation, and grouped calendar views now come from Convex so campus planning stays durable and collaborative."
+        title="Events need Convex."
+        body="Add your deployment URL and run Convex to load the calendar."
       />
     )
   }
@@ -56,8 +56,8 @@ function LiveCalendarPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   if (data === undefined || data === null) {
     return (
       <LiveLoadingState
-        title="Loading campus events"
-        body="Convex is syncing shared calendar days, upcoming meetings, and event creation controls."
+        title="Loading events"
+        body="Syncing the calendar."
       />
     )
   }
@@ -90,31 +90,15 @@ function LiveCalendarPageInner({ workspaceSlug }: { workspaceSlug: string }) {
 
   return (
     <div className="space-y-6 lg:space-y-8">
-      <section className="do-surface p-6 md:p-8 lg:p-10">
-        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-4">
-            <p className="do-eyebrow">Events & Meetings</p>
-            <h2 className="do-heading max-w-3xl">
-              Put every club meeting and campus moment on one shared calendar.
-            </h2>
-            <p className="max-w-2xl do-copy">
-              This gives CampusHive a real event layer: organizers can add sessions,
-              everyone can scan the week, and virtual-ready events stay visible.
-            </p>
+      <section className="do-surface p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="do-eyebrow">Calendar</p>
+            <h2 className="mt-2 do-subheading">Shared campus schedule.</h2>
           </div>
-
-          <div className="do-panel p-5">
-            <p className="do-stat-label">Scheduling Notes</p>
-            <p className="mt-3 text-[22px] font-medium text-cream">
-              {data.canManage
-                ? "Institute admins can publish new calendar entries from this page."
-                : "You can follow the shared campus schedule in real time."}
-            </p>
-            <p className="mt-3 text-[13px] leading-6 text-tan">
-              Online and hybrid events can already be marked here. Automatic room
-              generation can plug into this next without changing the route design.
-            </p>
-          </div>
+          <span className="do-pill">
+            {data.canManage ? "Admin can publish" : "Read-only"}
+          </span>
         </div>
       </section>
 
@@ -123,7 +107,6 @@ function LiveCalendarPageInner({ workspaceSlug }: { workspaceSlug: string }) {
           <div key={metric.label} className="do-card p-5">
             <p className="do-stat-label">{metric.label}</p>
             <p className="mt-4 do-stat-value">{metric.value}</p>
-            <p className="mt-2 text-[12px] leading-6 text-tan">{metric.detail}</p>
           </div>
         ))}
       </section>
@@ -131,8 +114,8 @@ function LiveCalendarPageInner({ workspaceSlug }: { workspaceSlug: string }) {
       <section className="do-panel p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="do-eyebrow">Create Event</p>
-            <h3 className="mt-2 do-subheading">Add something to the campus calendar</h3>
+            <p className="do-eyebrow">New Event</p>
+            <h3 className="mt-2 do-subheading">Add event</h3>
           </div>
           {!data.canManage ? <span className="do-pill">Institute admins only</span> : null}
         </div>
@@ -195,8 +178,8 @@ function LiveCalendarPageInner({ workspaceSlug }: { workspaceSlug: string }) {
 
       <section className="space-y-4">
         <div>
-          <p className="do-eyebrow">Upcoming Schedule</p>
-          <h3 className="mt-2 do-subheading">What the campus is gathering around next</h3>
+          <p className="do-eyebrow">Schedule</p>
+          <h3 className="mt-2 do-subheading">Upcoming</h3>
         </div>
 
         {data.days.length ? (
@@ -247,9 +230,8 @@ function LiveCalendarPageInner({ workspaceSlug }: { workspaceSlug: string }) {
             ))}
           </div>
         ) : (
-          <div className="do-panel p-6 text-[13px] leading-6 text-tan">
-            No events are scheduled yet. Add the first meeting, workshop, or club
-            session above to turn this into a real shared campus calendar.
+          <div className="do-panel p-6 text-[13px] text-tan">
+            No events scheduled yet.
           </div>
         )}
       </section>

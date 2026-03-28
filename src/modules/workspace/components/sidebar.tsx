@@ -39,16 +39,16 @@ function SidebarLink({
     <Link
       href={href}
       className={cn(
-        "group flex items-center justify-between gap-3 rounded-2xl border border-transparent px-3 py-3 text-[13px] text-tan transition-all duration-200 ease-out hover:border-hairline hover:bg-field/70 hover:text-beige",
+        "group flex items-center justify-between gap-3 rounded-[16px] border border-transparent px-3 py-2.5 text-[13px] text-tan transition-colors duration-200 ease-out hover:border-hairline hover:bg-field/60 hover:text-beige",
         isActive &&
-          "border-hairline bg-active-row text-parchment shadow-[0_12px_30px_rgba(0,0,0,0.16)] hover:bg-active-row"
+          "border-hairline bg-active-row text-parchment hover:bg-active-row"
       )}
     >
       <span className="flex min-w-0 items-center gap-3">
         {icon ? (
           <span
             className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-tan transition-colors",
+              "flex size-8 shrink-0 items-center justify-center rounded-full border border-hairline bg-panel/80 text-tan transition-colors",
               isActive && "bg-elevated text-cream"
             )}
           >
@@ -100,26 +100,21 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
   const workspaceInitial = workspaceName.charAt(0).toUpperCase()
   const roleLabel =
     directoryData?.currentRole === "admin" ? "College admin" : "Student member"
-  const activeMembers =
-    directoryData?.members.filter((member) => member.isActive).length ?? 0
 
   return (
-    <aside className="w-full shrink-0 border-b border-hairline/80 bg-panel/65 backdrop-blur-xl lg:w-[320px] lg:border-r lg:border-b-0">
-      <div className="flex h-full flex-col gap-6 p-4 md:p-5">
-        <div className="do-panel p-4">
+    <aside className="w-full shrink-0 border-b border-hairline/80 bg-panel/55 backdrop-blur-xl lg:w-[280px] lg:border-r lg:border-b-0">
+      <div className="flex h-full flex-col gap-4 p-4">
+        <div className="do-panel p-3.5">
           <div className="flex items-start gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-hairline bg-elevated text-[16px] font-semibold text-cream">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-[16px] border border-hairline bg-elevated text-[15px] font-semibold text-cream">
               {workspaceInitial}
             </div>
             <div className="min-w-0 space-y-1">
-              <div className="truncate font-display text-[22px] leading-none text-cream">
+              <div className="truncate text-[16px] font-medium leading-none text-cream">
                 {workspaceName}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="do-pill">{roleLabel}</span>
-                <span className="text-[10px] tracking-[0.14em] text-tan uppercase">
-                  {workspaceSlug}
-                </span>
               </div>
             </div>
           </div>
@@ -141,7 +136,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
         <div className="grid gap-4">
           <div className="do-panel p-4">
             <div className="flex items-center justify-between">
-              <div className="do-eyebrow">Club Spaces</div>
+              <div className="do-eyebrow">Clubs</div>
               <span className="text-[10px] tracking-[0.14em] text-tan uppercase">
                 {channelsData?.channels.length ?? 0} live
               </span>
@@ -161,9 +156,8 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
                   </SidebarLink>
                 ))
               ) : (
-                <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan">
-                  No club spaces yet. College admins can create the first one from
-                  the Clubs page.
+                <div className="rounded-[16px] border border-dashed border-hairline bg-surface/55 p-4 text-[13px] text-tan">
+                  No clubs yet.
                 </div>
               )}
             </div>
@@ -171,7 +165,7 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
 
           <div className="do-panel p-4">
             <div className="flex items-center justify-between">
-              <div className="do-eyebrow">Students</div>
+              <div className="do-eyebrow">People</div>
               <span className="text-[10px] tracking-[0.14em] text-tan uppercase">
                 {directoryData?.members.length ?? 0} synced
               </span>
@@ -202,24 +196,12 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
                   </div>
                 ))
               ) : (
-                <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan">
-                  Students appear here after they open the campus for the first
-                  time.
+                <div className="rounded-[16px] border border-dashed border-hairline bg-surface/55 p-4 text-[13px] text-tan">
+                  No members yet.
                 </div>
               )}
             </div>
           </div>
-        </div>
-
-        <div className="do-panel mt-auto p-4">
-          <div className="flex items-center justify-between">
-            <div className="do-eyebrow">Campus Pulse</div>
-            <span className="do-pill">{activeMembers.toString().padStart(2, "0")} live</span>
-          </div>
-          <p className="mt-3 text-[13px] leading-6 text-tan">
-            Navigation, club spaces, and student presence are now flowing from
-            live Clerk organization data and Convex records for this campus.
-          </p>
         </div>
       </div>
     </aside>

@@ -8,8 +8,7 @@ export const eventsSection: WorkspaceSection = {
   match: "prefix",
   navLabel: "Events",
   title: "Events",
-  subtitle:
-    "Shared calendars for meetings, campus moments, and RSVP-ready planning.",
+  subtitle: "Shared schedule.",
   room: "events",
   icon: CalendarDaysIcon,
 }

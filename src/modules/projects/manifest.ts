@@ -8,8 +8,7 @@ export const projectsSection: WorkspaceSection = {
   match: "prefix",
   navLabel: "Event Ops",
   title: "Event Ops",
-  subtitle:
-    "Assign volunteer tasks, track ownership, and react before small slips become event-day chaos.",
+  subtitle: "Track tasks and ownership.",
   room: "event-ops",
   icon: FolderKanbanIcon,
 }

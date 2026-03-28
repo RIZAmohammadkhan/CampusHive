@@ -83,8 +83,8 @@ export function LiveChannelsPage({ workspaceSlug }: { workspaceSlug: string }) {
   if (!enabled) {
     return (
       <ConvexSetupNotice
-        title="Club spaces need a live Convex deployment."
-        body="Community history, campus membership, and message persistence run through Convex. Configure the deployment URL to turn this route into a functional campus communication layer."
+        title="Clubs need Convex."
+        body="Add your deployment URL and run Convex to load club data."
       />
     )
   }
@@ -114,8 +114,8 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   if (channelsData === undefined || directoryData === undefined) {
     return (
       <LiveLoadingState
-        title="Loading club spaces"
-        body="Convex is syncing community metadata, campus roles, and live student presence."
+        title="Loading clubs"
+        body="Syncing club data."
       />
     )
   }
@@ -123,8 +123,8 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   if (channelsData === null || directoryData === null) {
     return (
       <LiveLoadingState
-        title="Preparing campus spaces"
-        body="The campus record is still being created. This usually resolves in a moment."
+        title="Preparing workspace"
+        body="This usually resolves in a moment."
       />
     )
   }
@@ -224,17 +224,11 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
       <section className="space-y-6">
-        <div className="do-surface p-6 md:p-8 lg:p-10">
-          <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-            <div className="space-y-4">
-              <p className="do-eyebrow">Club Discovery & Joining</p>
-              <h2 className="do-heading max-w-3xl">
-                Every college club needs a clear front door, not another hidden chat link.
-              </h2>
-              <p className="max-w-2xl do-copy">
-                Students can discover clubs by category, join open communities instantly,
-                and request access when a leadership team wants approvals.
-              </p>
+        <div className="do-surface p-6">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div>
+              <p className="do-eyebrow">Clubs</p>
+              <h2 className="mt-2 do-subheading">Browse, join, or create a club.</h2>
             </div>
 
             <div className="do-panel p-5">
@@ -288,12 +282,6 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                   Create club space
                 </Button>
               </form>
-              {!isAdmin ? (
-                <p className="mt-3 text-[12px] leading-6 text-tan">
-                  College admins can launch club spaces. Students can join open clubs
-                  immediately or request access to approval-based clubs.
-                </p>
-              ) : null}
             </div>
           </div>
         </div>
@@ -317,7 +305,7 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                       )}
                       <span className="do-pill">{membershipLabel(channel.membershipState)}</span>
                     </div>
-                    <p className="mt-2 text-[13px] leading-6 text-tan">
+                    <p className="mt-2 text-[13px] text-tan">
                       {channel.description}
                     </p>
                   </div>
@@ -372,9 +360,8 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
               </div>
             ))
           ) : (
-            <div className="do-panel p-6 text-[13px] leading-6 text-tan">
-              No clubs exist yet. Create the first one to give students a place to
-              discover, join, and organize around a real community.
+            <div className="do-panel p-6 text-[13px] text-tan">
+              No clubs yet.
             </div>
           )}
         </div>
@@ -384,13 +371,8 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
         <section className="do-panel p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="do-eyebrow">Campus Members</p>
-              <h3 className="mt-2 text-[20px] font-medium text-cream">
-                Student directory
-              </h3>
-              <p className="mt-2 text-[12px] leading-6 text-tan">
-                Click a member to open their full campus profile.
-              </p>
+              <p className="do-eyebrow">People</p>
+              <h3 className="mt-2 text-[20px] font-medium text-cream">Directory</h3>
             </div>
             <span className="do-pill">
               <Users2Icon className="size-3.5" />
@@ -428,8 +410,8 @@ function LiveChannelsPageInner({ workspaceSlug }: { workspaceSlug: string }) {
                 </button>
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan">
-                Students appear here after they sign into the college workspace.
+              <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] text-tan">
+                No members yet.
               </div>
             )}
           </div>

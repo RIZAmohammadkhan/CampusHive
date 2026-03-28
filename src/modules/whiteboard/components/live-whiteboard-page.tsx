@@ -46,8 +46,8 @@ export function LiveWhiteboardPage({
   if (!enabled) {
     return (
       <ConvexSetupNotice
-        title="Gate and polling views need a live Convex deployment."
-        body="Presence, pass issuance, check-in actions, and poll results now come from Convex so this control room can stay operational instead of static."
+        title="Gate and polls need Convex."
+        body="Add your deployment URL and run Convex to load this page."
       />
     )
   }
@@ -92,7 +92,7 @@ function LiveWhiteboardPageInner({
     return (
       <LiveLoadingState
         title="Loading control room"
-        body="Convex is syncing gate passes, check-in state, live polls, and campus ops presence."
+        body="Syncing passes and polls."
       />
     )
   }
@@ -275,30 +275,17 @@ function LiveWhiteboardPageInner({
 
   return (
     <div className="space-y-6 lg:space-y-8">
-      <section className="do-surface p-6 md:p-8 lg:p-10">
-        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-4">
-            <p className="do-eyebrow">Gate Passes & Polls</p>
-            <h2 className="do-heading max-w-3xl">
-              Run entry lines and live decisions from one cleaner control room.
-            </h2>
-            <p className="max-w-2xl do-copy">
-              Gate passes now persist, the desk can check people in live, and campus
-              polls keep results updated for everyone in the workspace.
-            </p>
+      <section className="do-surface p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="do-eyebrow">Control Room</p>
+            <h2 className="mt-2 do-subheading">Passes, check-ins, and polls.</h2>
           </div>
-
-          <div className="do-panel p-5">
-            <p className="do-stat-label">Operations Status</p>
-            <p className="mt-3 text-[22px] font-medium text-cream">
-              {data.canManage
-                ? "Issue passes, run the check-in desk, and launch polls from this page."
-                : "Follow live entry activity here and vote on open campus decisions."}
-            </p>
-            <p className="mt-3 text-[13px] leading-6 text-tan">
-              {data.activeNow} people are active in campus ops right now, so gate
-              movement and poll turnout can update without leaving the workspace.
-            </p>
+          <div className="flex flex-wrap gap-2">
+            <span className="do-pill">{data.activeNow} active</span>
+            <span className="do-pill">
+              {data.canManage ? "Admin controls enabled" : "Voting access"}
+            </span>
           </div>
         </div>
       </section>
@@ -308,7 +295,6 @@ function LiveWhiteboardPageInner({
           <div key={metric.label} className="do-card p-5">
             <p className="do-stat-label">{metric.label}</p>
             <p className="mt-4 do-stat-value">{metric.value}</p>
-            <p className="mt-2 text-[12px] leading-6 text-tan">{metric.detail}</p>
           </div>
         ))}
       </section>
@@ -319,7 +305,7 @@ function LiveWhiteboardPageInner({
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <p className="do-eyebrow">Gate Desk</p>
-                <h3 className="mt-2 do-subheading">Issue passes and process entry</h3>
+                <h3 className="mt-2 do-subheading">Issue and check in</h3>
               </div>
               {!data.canManage ? <span className="do-pill">Institute admins only</span> : null}
             </div>
@@ -393,10 +379,7 @@ function LiveWhiteboardPageInner({
               <div className="space-y-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="do-eyebrow">Recent passes</p>
-                    <p className="mt-2 text-[13px] leading-6 text-tan">
-                      Pending entries stay pinned to the top so the desk stays focused.
-                    </p>
+                    <p className="do-eyebrow">Recent Passes</p>
                   </div>
                   <Input
                     value={gateSearch}
@@ -482,10 +465,10 @@ function LiveWhiteboardPageInner({
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan">
+                  <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] text-tan">
                     {data.gatePasses.length
                       ? "No gate passes matched that search."
-                      : "No passes issued yet. Create the first attendee pass to start the desk."}
+                      : "No passes yet."}
                   </div>
                 )}
               </div>
@@ -496,7 +479,7 @@ function LiveWhiteboardPageInner({
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <p className="do-eyebrow">Live Polls</p>
-                <h3 className="mt-2 do-subheading">Create decisions and watch turnout move</h3>
+                <h3 className="mt-2 do-subheading">Create and track polls</h3>
               </div>
               {!data.canManage ? <span className="do-pill">Admins publish polls</span> : null}
             </div>

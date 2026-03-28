@@ -100,8 +100,8 @@ export function LiveChannelPage({
   if (!enabled) {
     return (
       <ConvexSetupNotice
-        title="Club conversations need Convex."
-        body="This route expects a Convex deployment for persisted messages, club event tickets, member profiles, and live polls."
+        title="This page needs Convex."
+        body="Add your deployment URL and run Convex to load messages and club activity."
       />
     )
   }
@@ -166,8 +166,8 @@ function LiveChannelPageInner({
   ) {
     return (
       <LiveLoadingState
-        title="Loading club space"
-        body="Convex is connecting club chat, member details, event tickets, and live polls."
+        title="Loading club"
+        body="Syncing messages and club activity."
       />
     )
   }
@@ -177,11 +177,8 @@ function LiveChannelPageInner({
       <div className="do-surface p-6 md:p-8 lg:p-10">
         <p className="do-eyebrow">Conversation missing</p>
         <h2 className="mt-3 do-subheading">
-          This club space is not available in this college workspace.
+          This club space is not available.
         </h2>
-        <p className="mt-4 max-w-2xl text-[14px] leading-7 text-tan">
-          It may have been removed, or you may be following an outdated link.
-        </p>
       </div>
     )
   }
@@ -360,12 +357,7 @@ function LiveChannelPageInner({
           {!canViewMessages ? (
             <div className="do-card p-6">
               <p className="text-[16px] font-medium text-cream">
-                Join this club space to unlock its events, tickets, and discussion.
-              </p>
-              <p className="mt-3 max-w-2xl text-[13px] leading-7 text-tan">
-                This club keeps event registration, voting, and chat together. Once
-                your request is approved, ticket claiming and club polls will appear
-                here automatically.
+                Join this club to view its activity.
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
                 {canJoin ? (
@@ -404,9 +396,9 @@ function LiveChannelPageInner({
               <section className="do-panel p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <p className="do-eyebrow">Club Events & Tickets</p>
+                    <p className="do-eyebrow">Events</p>
                     <h3 className="mt-2 text-[24px] font-medium text-cream">
-                      Join events inside the club and carry a real ticket
+                      Events and tickets
                     </h3>
                   </div>
                   {!clubOps.canManage ? (
@@ -672,8 +664,7 @@ function LiveChannelPageInner({
                       ))
                     ) : (
                       <div className="rounded-[24px] border border-dashed border-hairline bg-surface/55 p-5 text-[13px] leading-6 text-tan">
-                        No club events yet. Create one on the left and members will be
-                        able to join it from this page and receive a QR ticket.
+                        No events yet.
                       </div>
                     )}
                   </div>
@@ -683,9 +674,9 @@ function LiveChannelPageInner({
               <section className="do-panel p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <p className="do-eyebrow">Club Polls</p>
+                    <p className="do-eyebrow">Polls</p>
                     <h3 className="mt-2 text-[24px] font-medium text-cream">
-                      Keep club decisions beside the event they affect
+                      Club decisions
                     </h3>
                   </div>
                   {!clubOps.canManage ? (
@@ -860,8 +851,7 @@ function LiveChannelPageInner({
                       ))
                     ) : (
                       <div className="rounded-[24px] border border-dashed border-hairline bg-surface/55 p-5 text-[13px] leading-6 text-tan">
-                        No club polls yet. Publish one here so attendance, topics, or
-                        logistics decisions stay tied to this club.
+                        No polls yet.
                       </div>
                     )}
                   </div>
@@ -871,17 +861,16 @@ function LiveChannelPageInner({
               <section className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="do-eyebrow">Club Chat</p>
+                    <p className="do-eyebrow">Chat</p>
                     <h3 className="mt-2 text-[22px] font-medium text-cream">
-                      Keep the discussion with the event context
+                      Messages
                     </h3>
                   </div>
                 </div>
 
                 {messages.length === 0 ? (
                   <div className="do-card p-5 text-[13px] leading-6 text-tan">
-                    No messages yet. Start the conversation and CampusHive will keep
-                    the context visible for everyone who enters this space after you.
+                    No messages yet.
                   </div>
                 ) : (
                   messages.map((entry) => (
@@ -953,15 +942,11 @@ function LiveChannelPageInner({
         <section className="do-panel p-5">
           <p className="do-eyebrow">Membership</p>
           <h3 className="mt-2 text-[20px] font-medium text-cream">
-            {access === "public"
-              ? "This space is open across the campus"
-              : "Join requests and club membership"}
+            {access === "public" ? "Open access" : "Membership"}
           </h3>
-          <div className="mt-5 space-y-3 text-[13px] leading-6 text-tan">
+          <div className="mt-5 space-y-3 text-[13px] text-tan">
             <div className="rounded-2xl border border-hairline bg-surface/55 p-4">
-              {access === "public"
-                ? "Open clubs stay discoverable for the whole college. Students can follow them, jump into the discussion, and still see who has formally joined."
-                : "Approval-based clubs keep discussion, event tickets, and polls inside a real member list. Students can request access, leads can approve, and members can leave when needed."}
+              {access === "public" ? "Anyone in the workspace can join." : "Approval is required to join."}
             </div>
             {conversation.canManage ? (
               <div className="rounded-2xl border border-hairline bg-surface/55 p-4">
@@ -969,9 +954,9 @@ function LiveChannelPageInner({
                   <ShieldCheckIcon className="size-4 text-sage" />
                   {access === "members"
                     ? canEditRoles
-                      ? "You can review requests, manage the roster, publish events, and update club roles here."
-                      : "You can review requests and manage this club's activity here."
-                    : "You can publish events, run polls, and guide the activity of this open club here."}
+                      ? "You can review requests and manage roles."
+                      : "You can review requests and manage activity."
+                    : "You can manage this club here."}
                 </span>
               </div>
             ) : null}
@@ -1030,12 +1015,8 @@ function LiveChannelPageInner({
           <section className="do-panel p-5">
             <p className="do-eyebrow">Members</p>
             <h3 className="mt-2 text-[20px] font-medium text-cream">
-              Current club roster
+              Roster
             </h3>
-            <p className="mt-2 text-[12px] leading-6 text-tan">
-              Click a member to open their profile with organization, name details,
-              memberships, and recent tickets.
-            </p>
             <div className="mt-5 space-y-3">
               {members.length ? (
                 members.map((member) => (
@@ -1114,8 +1095,8 @@ function LiveChannelPageInner({
                   </div>
                 ))
               ) : (
-                <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] leading-6 text-tan">
-                  No members yet. The first approved students will appear here.
+                <div className="rounded-2xl border border-dashed border-hairline bg-surface/55 p-4 text-[13px] text-tan">
+                  No members yet.
                 </div>
               )}
             </div>
@@ -1126,7 +1107,7 @@ function LiveChannelPageInner({
           <section className="do-panel p-5">
             <p className="do-eyebrow">Pending Requests</p>
             <h3 className="mt-2 text-[20px] font-medium text-cream">
-              Students waiting for approval
+              Awaiting approval
             </h3>
             <div className="mt-5 space-y-3">
               {pendingRequests.map((request) => (

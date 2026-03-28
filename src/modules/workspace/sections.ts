@@ -2,7 +2,6 @@ import { channelsSection } from "@/modules/channels/manifest"
 import { dashboardSection } from "@/modules/dashboard/manifest"
 import { eventsSection } from "@/modules/events/manifest"
 import { projectsSection } from "@/modules/projects/manifest"
-import { resourcesSection } from "@/modules/resources/manifest"
 import { whiteboardSection } from "@/modules/whiteboard/manifest"
 
 import type { WorkspaceSection } from "@/modules/workspace/section"
@@ -12,7 +11,6 @@ export const workspaceSections = [
   channelsSection,
   projectsSection,
   eventsSection,
-  resourcesSection,
   whiteboardSection,
 ] as const satisfies readonly WorkspaceSection[]
 
