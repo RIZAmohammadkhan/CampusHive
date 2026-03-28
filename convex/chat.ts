@@ -17,6 +17,7 @@ import type { Doc, Id, MutationCtx, ReadCtx } from "./types"
 type ChannelAccess = "public" | "members"
 type ClubRole = "owner" | "officer" | "member"
 type MembershipState = "public" | "admin" | "owner" | "officer" | "member" | "pending" | "notMember"
+type SectionReplyAccessMode = "everyone" | "selected"
 const liveStatus = v.union(v.literal("open"), v.literal("closed"))
 const ticketCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const campusFeedDiscussionSection = {
@@ -52,6 +53,8 @@ type DiscussionSectionSnapshot = {
   slug: string
   name: string
   description: string | null
+  replyAccessMode: SectionReplyAccessMode
+  allowedReplyUserIds: string[]
   position: number
 }
 
@@ -338,6 +341,8 @@ async function ensureStoredDiscussionSections(
       slug: section.slug,
       name: section.name,
       description: section.description,
+      replyAccessMode: "everyone",
+      allowedReplyUserIds: [],
       position,
       createdAt: now + position,
       createdByUserId,
@@ -358,6 +363,8 @@ async function listDiscussionSectionSnapshots(
         slug: directMessageDiscussionSection.slug,
         name: directMessageDiscussionSection.name,
         description: directMessageDiscussionSection.description,
+        replyAccessMode: "everyone",
+        allowedReplyUserIds: [],
         position: 0,
       },
     ]
@@ -370,6 +377,8 @@ async function listDiscussionSectionSnapshots(
         slug: campusFeedDiscussionSection.slug,
         name: campusFeedDiscussionSection.name,
         description: campusFeedDiscussionSection.description,
+        replyAccessMode: "everyone",
+        allowedReplyUserIds: [],
         position: 0,
       },
     ]
@@ -383,6 +392,10 @@ async function listDiscussionSectionSnapshots(
       slug: section.slug,
       name: section.name,
       description: section.description ?? null,
+      replyAccessMode: section.replyAccessMode ?? "everyone",
+      allowedReplyUserIds: (section.allowedReplyUserIds ?? []).map((userId) =>
+        String(userId)
+      ),
       position: section.position,
     }))
   }
@@ -392,6 +405,8 @@ async function listDiscussionSectionSnapshots(
     slug: section.slug,
     name: section.name,
     description: section.description,
+    replyAccessMode: "everyone",
+    allowedReplyUserIds: [],
     position: index,
   }))
 }
@@ -432,6 +447,55 @@ function selectDiscussionSection(
     sections[0] ??
     null
   )
+}
+
+function getDiscussionSectionReplyAccess(section: {
+  replyAccessMode?: SectionReplyAccessMode
+  allowedReplyUserIds?: Array<Id<"users"> | string>
+}) {
+  return {
+    replyAccessMode: section.replyAccessMode ?? "everyone",
+    allowedReplyUserIds: (section.allowedReplyUserIds ?? []).map((userId) => String(userId)),
+  }
+}
+
+function canReplyToDiscussionSection({
+  conversation,
+  workspaceRole,
+  clubRole,
+  canViewMessages,
+  userId,
+  section,
+}: {
+  conversation: Doc<"conversations">
+  workspaceRole: "admin" | "member"
+  clubRole: ClubRole | null
+  canViewMessages: boolean
+  userId: Id<"users"> | null
+  section:
+    | DiscussionSectionSnapshot
+    | Pick<Doc<"clubDiscussionSections">, "replyAccessMode" | "allowedReplyUserIds">
+    | null
+}) {
+  if (!canViewMessages) {
+    return false
+  }
+
+  const replyAccess = section ? getDiscussionSectionReplyAccess(section) : null
+
+  if (!replyAccess || replyAccess.replyAccessMode === "everyone") {
+    return true
+  }
+
+  if (canManageConversation({ kind: conversation.kind, workspaceRole, clubRole })) {
+    return true
+  }
+
+  if (!userId) {
+    return false
+  }
+
+  return replyAccess.allowedReplyUserIds.includes(String(userId))
 }
 
 async function upsertConversationMembership(
@@ -1163,6 +1227,16 @@ export const conversation = queryGeneric({
         description: section.description,
         messageCount: sectionStats.get(section.slug)?.messageCount ?? 0,
         lastMessageAt: sectionStats.get(section.slug)?.lastMessageAt ?? null,
+        replyAccessMode: section.replyAccessMode,
+        allowedReplyUserIds: section.allowedReplyUserIds,
+        canReply: canReplyToDiscussionSection({
+          conversation: convo,
+          workspaceRole,
+          clubRole: viewerClubRole,
+          canViewMessages,
+          userId: currentUser?._id ?? null,
+          section,
+        }),
       })),
       members,
       pendingRequests,
@@ -2059,6 +2133,8 @@ export const createDiscussionSection = mutationGeneric({
       slug,
       name,
       description,
+      replyAccessMode: "everyone",
+      allowedReplyUserIds: [],
       position: existingSections.length,
       createdAt: Date.now(),
       createdByUserId: manager.user._id,
@@ -2068,6 +2144,72 @@ export const createDiscussionSection = mutationGeneric({
       sectionId: String(sectionId),
       slug,
     }
+  },
+})
+
+export const setDiscussionSectionReplyAccess = mutationGeneric({
+  args: {
+    workspaceSlug: v.string(),
+    slug: v.string(),
+    sectionSlug: v.string(),
+    replyAccessMode: v.union(v.literal("everyone"), v.literal("selected")),
+    allowedUserIds: v.array(v.string()),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const identity = await requireIdentity(ctx)
+    assertActiveOrganization(identity, { slug: args.workspaceSlug })
+    const workspace = await getWorkspaceBySlug(ctx, args.workspaceSlug)
+
+    if (!workspace) {
+      throw new Error("Campus space not found.")
+    }
+
+    const convo = await findConversation(ctx, workspace._id, args.slug)
+
+    if (!convo) {
+      throw new Error("Club space not found.")
+    }
+
+    if (convo.kind !== "channel" || convo.slug === "general") {
+      throw new Error("Reply access can only be configured for club channels.")
+    }
+
+    const manager = await requireConversationManager(ctx, workspace, convo)
+    const discussionSections = await ensureStoredDiscussionSections(
+      ctx,
+      workspace._id,
+      convo,
+      manager.user._id
+    )
+    const targetSection =
+      discussionSections.find((section) => section.slug === args.sectionSlug) ?? null
+
+    if (!targetSection) {
+      throw new Error("Channel not found.")
+    }
+
+    const memberIds = new Set(
+      (
+        await listConversationMembershipDocs(ctx, convo._id)
+      ).map((membership) => String(membership.userId))
+    )
+    const allowedReplyUserIds = Array.from(
+      new Set(args.allowedUserIds.map((userId) => userId.trim()).filter(Boolean))
+    )
+
+    if (allowedReplyUserIds.some((userId) => !memberIds.has(userId))) {
+      throw new Error("Only club members can be selected for reply access.")
+    }
+
+    await ctx.db.patch(targetSection._id, {
+      replyAccessMode: args.replyAccessMode,
+      allowedReplyUserIds:
+        args.replyAccessMode === "selected"
+          ? (allowedReplyUserIds as Id<"users">[])
+          : [],
+    })
+
+    return null
   },
 })
 
@@ -2463,6 +2605,21 @@ export const sendMessage = mutationGeneric({
 
     if (convo.slug !== "general" && convo.kind !== "dm" && !selectedSection) {
       throw new Error("This club does not have a discussion section yet.")
+    }
+
+    if (
+      convo.kind === "channel" &&
+      convo.slug !== "general" &&
+      !canReplyToDiscussionSection({
+        conversation: convo,
+        workspaceRole,
+        clubRole,
+        canViewMessages: true,
+        userId: user._id,
+        section: selectedSection,
+      })
+    ) {
+      throw new Error("Only selected members can reply in this channel.")
     }
 
     await ctx.db.insert("messages", {

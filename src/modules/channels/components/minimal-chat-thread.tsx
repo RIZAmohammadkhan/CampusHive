@@ -29,6 +29,8 @@ export function MinimalChatThread({
   scopeLabel,
   headerAction,
   threadLinks = [],
+  threadLinksAction,
+  threadLinksPanel,
   topContent,
   messages,
   canPostMessages,
@@ -40,6 +42,7 @@ export function MinimalChatThread({
   emptyState,
   composerHint,
   composerAction,
+  readOnlyMessage,
   authorHref,
 }: {
   backHref: string
@@ -49,6 +52,8 @@ export function MinimalChatThread({
   scopeLabel?: string
   headerAction?: ReactNode
   threadLinks?: ThreadLink[]
+  threadLinksAction?: ReactNode
+  threadLinksPanel?: ReactNode
   topContent?: ReactNode
   messages: MessageData[]
   canPostMessages: boolean
@@ -60,9 +65,11 @@ export function MinimalChatThread({
   emptyState: string
   composerHint?: string
   composerAction?: ReactNode
+  readOnlyMessage?: string
   authorHref?: (authorId: string) => string | null
 }) {
   const timeline = buildMessageTimeline(messages)
+  const hasComposerMeta = Boolean(composerAction || composerHint)
 
   return (
     <div className="mx-auto w-full max-w-[880px]">
@@ -98,22 +105,33 @@ export function MinimalChatThread({
             {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
           </div>
 
-          {threadLinks.length ? (
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-              {threadLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    "whitespace-nowrap rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors",
-                    link.active
-                      ? "border-[rgba(201,132,122,0.22)] bg-[rgba(201,132,122,0.12)] text-parchment"
-                      : "border-hairline bg-surface/60 text-tan hover:text-parchment"
-                  )}
-                >
-                  {link.label}
-                </Link>
-              ))}
+          {threadLinks.length || threadLinksAction ? (
+            <div className="mt-3">
+              <div className="flex items-center gap-2">
+                {threadLinks.length ? (
+                  <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
+                    {threadLinks.map((link) => (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className={cn(
+                          "whitespace-nowrap rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors",
+                          link.active
+                            ? "border-[rgba(201,132,122,0.22)] bg-[rgba(201,132,122,0.12)] text-parchment"
+                            : "border-hairline bg-surface/60 text-tan hover:text-parchment"
+                        )}
+                      >
+                        {link.label}
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex-1" />
+                )}
+                {threadLinksAction ? <div className="shrink-0">{threadLinksAction}</div> : null}
+              </div>
+
+              {threadLinksPanel ? <div className="mt-3">{threadLinksPanel}</div> : null}
             </div>
           ) : null}
         </div>
@@ -200,13 +218,20 @@ export function MinimalChatThread({
                   className={composerClassName}
                   disabled={isPending}
                 />
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {composerAction}
-                    {composerHint ? (
-                      <p className="text-[12px] leading-6 text-tan">{composerHint}</p>
-                    ) : null}
-                  </div>
+                <div
+                  className={cn(
+                    "flex flex-col gap-3 sm:flex-row sm:items-center",
+                    hasComposerMeta ? "sm:justify-between" : "sm:justify-end"
+                  )}
+                >
+                  {hasComposerMeta ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {composerAction}
+                      {composerHint ? (
+                        <p className="text-[12px] leading-6 text-tan">{composerHint}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <Button
                     type="submit"
                     disabled={isPending || !draft.trim()}
@@ -219,7 +244,7 @@ export function MinimalChatThread({
             </form>
           ) : (
             <div className="border-t border-hairline px-4 py-4 text-[13px] leading-6 text-tan sm:px-6">
-              Discussion is read-only right now.
+              {readOnlyMessage ?? "Discussion is read-only right now."}
             </div>
           )}
         </div>

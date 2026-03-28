@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { useOrganization } from "@clerk/nextjs"
+import { UserButton, useUser } from "@clerk/nextjs"
 import { useConvexAuth, useQuery } from "convex/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -97,11 +97,10 @@ type AppSidebarProps = {
 export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
   const enabled = useConvexConfigured()
   const { isAuthenticated } = useConvexAuth()
-  const { organization } = useOrganization()
+  const { user } = useUser()
   const queryArgs = enabled && isAuthenticated ? { workspaceSlug } : "skip"
   const channelsData = useQuery(channelsApi.listChannels, queryArgs)
   const directoryData = useQuery(workspaceApi.directory, queryArgs)
-  const workspaceName = organization?.name ?? workspaceSlug
   const roleLabel =
     directoryData?.currentRole === "admin" ? "College admin" : "Student"
   const totalClubs =
@@ -113,6 +112,15 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
   )
   const currentMember =
     directoryData?.members.find((member) => member.isCurrentUser) ?? null
+  const accountName =
+    user?.fullName?.trim() ||
+    currentMember?.name ||
+    user?.username ||
+    "Campus member"
+  const accountEmail =
+    user?.primaryEmailAddress?.emailAddress ??
+    currentMember?.email ??
+    null
   const sectionBadges: Partial<Record<(typeof workspaceSections)[number]["id"], string>> = {
     messages: unreadDirectMessages > 0 ? unreadDirectMessages.toString() : undefined,
     channels: totalClubs > 0 ? totalClubs.toString() : undefined,
@@ -148,20 +156,23 @@ export function AppSidebar({ workspaceSlug }: AppSidebarProps) {
           <div className="h-px bg-hairline" />
           <div className="mt-4 rounded-[10px] border border-hairline bg-elevated/92 p-3">
             <div className="flex items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] border border-hairline bg-panel text-[13px] font-medium text-parchment">
-                {(currentMember?.name ?? workspaceName).charAt(0).toUpperCase()}
-              </span>
+              <div className="shrink-0">
+                <UserButton />
+              </div>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-medium text-parchment">
-                  {currentMember?.name ?? "Campus member"}
+                  {accountName}
                 </span>
-                <span className="mt-1 block text-[11px] text-tan">{roleLabel}</span>
+                <span className="mt-1 block truncate text-[11px] text-tan">
+                  {accountEmail ?? roleLabel}
+                </span>
               </span>
               <PresenceDot
                 status={currentMember?.isActive ? "online" : "offline"}
                 className="size-2.5"
               />
             </div>
+            <p className="mt-3 text-[11px] text-tan">{roleLabel}</p>
           </div>
         </div>
       </div>

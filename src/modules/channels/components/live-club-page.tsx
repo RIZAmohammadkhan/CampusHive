@@ -9,6 +9,7 @@ import {
   useTransition,
 } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   CalendarDaysIcon,
   CheckCircle2Icon,
@@ -368,6 +369,7 @@ function ChannelPollPanel({
   canManage,
   isPending,
   pendingAction,
+  onCreatePoll,
   onToggleStatus,
   onVote,
 }: {
@@ -375,19 +377,29 @@ function ChannelPollPanel({
   canManage: boolean
   isPending: boolean
   pendingAction: string | null
+  onCreatePoll: () => void
   onToggleStatus: (pollId: string, nextStatus: "open" | "closed") => void
   onVote: (pollId: string, optionId: string, action: "vote" | "remove") => void
 }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-2">
           <p className="text-[12px] font-medium text-parchment">Polls</p>
-          <p className="text-[12px] leading-5 text-tan">
-            Vote without leaving this channel.
-          </p>
+          <span className="text-[12px] text-tan">{polls.length}</span>
         </div>
-        <span className="text-[12px] text-tan">{polls.length}</span>
+        {canManage ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onCreatePoll}
+            disabled={isPending && pendingAction === "create-club-poll"}
+          >
+            <PlusIcon className="size-4" />
+            Create poll
+          </Button>
+        ) : null}
       </div>
 
       {polls.length ? (
@@ -501,8 +513,8 @@ function ChannelPollPanel({
           ))}
         </div>
       ) : (
-        <div className="rounded-[16px] border border-dashed border-hairline bg-surface/45 px-4 py-5 text-[13px] leading-6 text-tan">
-          No polls in this channel yet.
+        <div className="rounded-[16px] border border-dashed border-hairline bg-surface/35 px-4 py-4 text-[12px] leading-6 text-tan">
+          No polls yet.
         </div>
       )}
     </div>
@@ -898,6 +910,7 @@ function LiveClubPageInner({
   clubSlug: string
   sectionSlug?: string
 }) {
+  const router = useRouter()
   const conversation = useQuery(channelsApi.conversation, {
     workspaceSlug,
     slug: clubSlug,
@@ -927,10 +940,19 @@ function LiveClubPageInner({
   const createClubPoll = useMutation(channelsApi.createClubPoll)
   const voteOnClubPoll = useMutation(channelsApi.voteOnClubPoll)
   const setClubPollStatus = useMutation(channelsApi.setClubPollStatus)
+  const setDiscussionSectionReplyAccess = useMutation(
+    channelsApi.setDiscussionSectionReplyAccess
+  )
   const [message, setMessage] = useState("")
   const [sectionName, setSectionName] = useState("")
   const [sectionDescription, setSectionDescription] = useState("")
   const [showSectionComposer, setShowSectionComposer] = useState(false)
+  const [isReplyAccessPanelOpen, setIsReplyAccessPanelOpen] = useState(false)
+  const [replyAccessMode, setReplyAccessMode] = useState<"everyone" | "selected">(
+    "everyone"
+  )
+  const [allowedReplyUserIds, setAllowedReplyUserIds] = useState<string[]>([])
+  const [replyAccessSearch, setReplyAccessSearch] = useState("")
   const [eventTitle, setEventTitle] = useState("")
   const [eventSummary, setEventSummary] = useState("")
   const [eventDate, setEventDate] = useState("")
@@ -944,6 +966,9 @@ function LiveClubPageInner({
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const deferredMemberSearch = useDeferredValue(memberSearch.trim().toLowerCase())
+  const deferredReplyAccessSearch = useDeferredValue(
+    replyAccessSearch.trim().toLowerCase()
+  )
   const isDiscussionView = Boolean(sectionSlug)
 
   useEffect(() => {
@@ -967,6 +992,30 @@ function LiveClubPageInner({
     messages,
     workspaceSlug,
   ])
+
+  useEffect(() => {
+    if (!conversation || conversation.kind !== "channel") {
+      return
+    }
+
+    const nextDiscussionSections = conversation.discussionSections ?? []
+    const nextSelectedSection =
+      nextDiscussionSections.find((section) => section.slug === sectionSlug) ??
+      nextDiscussionSections.find((section) =>
+        conversation.isGeneral ? section.slug === "feed" : section.slug === "general"
+      ) ??
+      nextDiscussionSections[0] ??
+      null
+
+    if (!nextSelectedSection) {
+      return
+    }
+
+    setReplyAccessMode(nextSelectedSection.replyAccessMode)
+    setAllowedReplyUserIds(nextSelectedSection.allowedReplyUserIds)
+    setReplyAccessSearch("")
+    setIsReplyAccessPanelOpen(false)
+  }, [conversation, sectionSlug])
 
   if (
     conversation === undefined ||
@@ -1001,7 +1050,6 @@ function LiveClubPageInner({
     (access === "public" ? "public" : conversation.canManage ? "admin" : "notMember")
   const canViewMessages =
     conversation.canViewMessages ?? (access === "public" || conversation.canManage)
-  const canPostMessages = conversation.canPostMessages ?? canViewMessages
   const canJoin = conversation.canJoin ?? false
   const canRequestToJoin = conversation.canRequestToJoin ?? false
   const canLeave = conversation.canLeave ?? false
@@ -1017,6 +1065,8 @@ function LiveClubPageInner({
     ) ??
     discussionSections[0] ??
     null
+  const canPostMessages =
+    selectedSection?.canReply ?? (conversation.canPostMessages ?? canViewMessages)
   const filteredMembers = members.filter((member) => {
     if (!deferredMemberSearch) {
       return true
@@ -1025,6 +1075,15 @@ function LiveClubPageInner({
     return `${member.name} ${member.role}`
       .toLowerCase()
       .includes(deferredMemberSearch)
+  })
+  const filteredReplyAccessMembers = members.filter((member) => {
+    if (!deferredReplyAccessSearch) {
+      return true
+    }
+
+    return `${member.name} ${member.role}`
+      .toLowerCase()
+      .includes(deferredReplyAccessSearch)
   })
   const overviewHref = workspaceClubPath(workspaceSlug, clubSlug)
   const discussionHref = workspaceClubDiscussionPath(
@@ -1085,18 +1144,78 @@ function LiveClubPageInner({
     runAction(
       "create-section",
       async () => {
-        await createDiscussionSection({
+        const result = await createDiscussionSection({
           workspaceSlug,
           slug: clubSlug,
           name: sectionName.trim(),
           description: sectionDescription.trim() || undefined,
         })
+
+        router.push(workspaceClubDiscussionPath(workspaceSlug, clubSlug, result.slug))
       },
-      "Discussion section created",
+      "Channel created",
       () => {
         setSectionName("")
         setSectionDescription("")
         setShowSectionComposer(false)
+      }
+    )
+  }
+
+  const resetReplyAccessDraft = () => {
+    if (!selectedSection) {
+      return
+    }
+
+    setReplyAccessMode(selectedSection.replyAccessMode)
+    setAllowedReplyUserIds(selectedSection.allowedReplyUserIds)
+    setReplyAccessSearch("")
+  }
+
+  const handleToggleSectionComposer = () => {
+    setIsReplyAccessPanelOpen(false)
+    setShowSectionComposer((value) => !value)
+  }
+
+  const handleToggleReplyAccessPanel = () => {
+    setShowSectionComposer(false)
+    resetReplyAccessDraft()
+    setIsReplyAccessPanelOpen((value) => !value)
+  }
+
+  const handleToggleAllowedReplyUserId = (userId: string) => {
+    setAllowedReplyUserIds((current) =>
+      current.includes(userId)
+        ? current.filter((entry) => entry !== userId)
+        : [...current, userId]
+    )
+  }
+
+  const handleCloseReplyAccessPanel = () => {
+    resetReplyAccessDraft()
+    setIsReplyAccessPanelOpen(false)
+  }
+
+  const handleSaveReplyAccess = () => {
+    if (!selectedSection) {
+      return
+    }
+
+    runAction(
+      "set-reply-access",
+      () =>
+        setDiscussionSectionReplyAccess({
+          workspaceSlug,
+          slug: clubSlug,
+          sectionSlug: selectedSection.slug,
+          replyAccessMode,
+          allowedUserIds:
+            replyAccessMode === "selected" ? allowedReplyUserIds : [],
+        }),
+      "Reply access updated",
+      () => {
+        setReplyAccessSearch("")
+        setIsReplyAccessPanelOpen(false)
       }
     )
   }
@@ -1327,16 +1446,6 @@ function LiveClubPageInner({
                   Separate club info from live discussion and open the exact section you need.
                 </p>
               </div>
-              {!conversation.isGeneral && conversation.canManage ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowSectionComposer((value) => !value)}
-                >
-                  <PlusIcon className="size-4" />
-                  Add section
-                </Button>
-              ) : null}
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-2">
@@ -1368,33 +1477,6 @@ function LiveClubPageInner({
                 </Link>
               ))}
             </div>
-
-            {!conversation.isGeneral && conversation.canManage && showSectionComposer ? (
-              <form onSubmit={handleCreateSection} className="mt-5 space-y-3 border-t border-hairline/80 pt-5">
-                <Input
-                  value={sectionName}
-                  onChange={(event) => setSectionName(event.target.value)}
-                  placeholder="Section name"
-                  disabled={isPending && pendingAction === "create-section"}
-                />
-                <textarea
-                  value={sectionDescription}
-                  onChange={(event) => setSectionDescription(event.target.value)}
-                  placeholder="Short description for this section"
-                  className={textareaClassName}
-                  disabled={isPending && pendingAction === "create-section"}
-                />
-                <Button
-                  type="submit"
-                  disabled={
-                    (isPending && pendingAction === "create-section") || !sectionName.trim()
-                  }
-                >
-                  <PlusIcon className="size-4" />
-                  Create section
-                </Button>
-              </form>
-            ) : null}
           </section>
 
           {clubOps.canParticipate ? (
@@ -1815,12 +1897,196 @@ function LiveClubPageInner({
           href: workspaceClubDiscussionPath(workspaceSlug, clubSlug, section.slug),
           label: section.name,
         }))}
+        threadLinksAction={
+          !conversation.isGeneral && conversation.canManage ? (
+            <div className="flex items-center gap-2">
+              {selectedSection ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={handleToggleReplyAccessPanel}
+                  disabled={isPending && pendingAction === "set-reply-access"}
+                >
+                  <ShieldCheckIcon className="size-4" />
+                  Reply access
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={handleToggleSectionComposer}
+                disabled={isPending && pendingAction === "create-section"}
+              >
+                <PlusIcon className="size-4" />
+                Add channel
+              </Button>
+            </div>
+          ) : undefined
+        }
+        threadLinksPanel={
+          !conversation.isGeneral && conversation.canManage ? (
+            showSectionComposer ? (
+              <form
+                onSubmit={handleCreateSection}
+                className="rounded-[18px] border border-hairline bg-surface/45 p-4"
+              >
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] lg:items-center">
+                  <Input
+                    value={sectionName}
+                    onChange={(event) => setSectionName(event.target.value)}
+                    placeholder="Channel name"
+                    disabled={isPending && pendingAction === "create-section"}
+                  />
+                  <Input
+                    value={sectionDescription}
+                    onChange={(event) => setSectionDescription(event.target.value)}
+                    placeholder="Short description (optional)"
+                    disabled={isPending && pendingAction === "create-section"}
+                  />
+                  <div className="flex flex-wrap gap-2 lg:justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowSectionComposer(false)}
+                      disabled={isPending && pendingAction === "create-section"}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={
+                        (isPending && pendingAction === "create-section") ||
+                        !sectionName.trim()
+                      }
+                    >
+                      <PlusIcon className="size-4" />
+                      Create channel
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            ) : isReplyAccessPanelOpen && selectedSection ? (
+              <div className="rounded-[18px] border border-hairline bg-surface/45 p-4">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="text-[13px] font-medium text-cream">
+                        Reply access for #{selectedSection.name}
+                      </p>
+                      <p className="mt-1 text-[12px] leading-6 text-tan">
+                        Managers can always reply. Everyone else follows the list below.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={replyAccessMode === "everyone" ? "secondary" : "outline"}
+                        onClick={() => setReplyAccessMode("everyone")}
+                      >
+                        Everyone
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={replyAccessMode === "selected" ? "secondary" : "outline"}
+                        onClick={() => setReplyAccessMode("selected")}
+                      >
+                        Selected people
+                      </Button>
+                    </div>
+                  </div>
+
+                  {replyAccessMode === "selected" ? (
+                    <>
+                      <Input
+                        value={replyAccessSearch}
+                        onChange={(event) => setReplyAccessSearch(event.target.value)}
+                        placeholder="Search members"
+                        disabled={isPending && pendingAction === "set-reply-access"}
+                      />
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {filteredReplyAccessMembers.map((member) => {
+                          const isSelected = allowedReplyUserIds.includes(member.id)
+
+                          return (
+                            <label
+                              key={member.id}
+                              className={cn(
+                                "flex items-center gap-3 rounded-[14px] border px-3 py-3 transition-colors",
+                                isSelected
+                                  ? "border-[rgba(201,132,122,0.22)] bg-[rgba(201,132,122,0.12)]"
+                                  : "border-hairline bg-surface/55"
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleAllowedReplyUserId(member.id)}
+                                className="size-4 rounded border border-hairline bg-field accent-[var(--rose)]"
+                                disabled={isPending && pendingAction === "set-reply-access"}
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[13px] font-medium text-cream">
+                                  {member.name}
+                                </span>
+                                <span className="mt-1 block text-[11px] text-tan capitalize">
+                                  {member.role}
+                                </span>
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                      {!filteredReplyAccessMembers.length ? (
+                        <p className="text-[12px] leading-6 text-tan">
+                          No members match your search.
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="text-[12px] leading-6 text-tan">
+                      Everyone who can view this channel can reply in it.
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 lg:justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCloseReplyAccessPanel}
+                      disabled={isPending && pendingAction === "set-reply-access"}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleSaveReplyAccess}
+                      disabled={isPending && pendingAction === "set-reply-access"}
+                    >
+                      Save access
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : undefined
+          ) : undefined
+        }
         topContent={
           <ChannelPollPanel
             polls={clubOps.polls}
             canManage={clubOps.canManage}
             isPending={isPending}
             pendingAction={pendingAction}
+            onCreatePoll={handleOpenPollComposer}
             onToggleStatus={(pollId, nextStatus) =>
               runAction(
                 `toggle-club-poll-${pollId}`,
@@ -1858,21 +2124,11 @@ function LiveClubPageInner({
         placeholder={
           selectedSection ? `Message #${selectedSection.slug}` : "Message this club"
         }
-        emptyState="No messages yet. Start the conversation."
-        composerHint={`Keep this section focused on ${selectedSection?.name ?? "the topic"}.`}
-        composerAction={
-          clubOps.canManage ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleOpenPollComposer}
-              disabled={isPending && pendingAction === "create-club-poll"}
-            >
-              <VoteIcon className="size-4" />
-              Create poll
-            </Button>
-          ) : undefined
+        emptyState="No messages yet."
+        readOnlyMessage={
+          selectedSection?.replyAccessMode === "selected"
+            ? "Only selected members can reply in this channel."
+            : undefined
         }
         authorHref={(authorId) => workspacePersonPath(workspaceSlug, authorId)}
       />

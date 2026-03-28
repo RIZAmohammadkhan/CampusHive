@@ -1,6 +1,6 @@
 "use client"
 
-import { OrganizationSwitcher, UserButton, useOrganization } from "@clerk/nextjs"
+import { OrganizationSwitcher, useOrganization } from "@clerk/nextjs"
 import { ShieldCheckIcon } from "lucide-react"
 import { useConvexAuth, useQuery } from "convex/react"
 import { usePathname } from "next/navigation"
@@ -62,7 +62,6 @@ export function AppTopbar({ workspaceSlug }: AppTopbarProps) {
             afterCreateOrganizationUrl={WORKSPACE_HOME_PATTERN}
             afterSelectOrganizationUrl={WORKSPACE_HOME_PATTERN}
           />
-          <UserButton />
         </div>
       </div>
     </header>

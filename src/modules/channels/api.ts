@@ -10,6 +10,7 @@ export type ChannelMembershipState =
   | "notMember"
 
 export type ClubRole = "owner" | "officer" | "member"
+export type DiscussionSectionReplyAccessMode = "everyone" | "selected"
 
 export type ChannelListData = {
   currentRole: "admin" | "member"
@@ -68,6 +69,9 @@ export type ConversationData = {
     description: string | null
     messageCount: number
     lastMessageAt: number | null
+    replyAccessMode: DiscussionSectionReplyAccessMode
+    allowedReplyUserIds: string[]
+    canReply: boolean
   }>
   members: Array<{
     id: string
@@ -193,6 +197,16 @@ export const channelsApi = {
     },
     { sectionId: string; slug: string }
   >("chat:createDiscussionSection"),
+  setDiscussionSectionReplyAccess: mutationRef<
+    {
+      workspaceSlug: string
+      slug: string
+      sectionSlug: string
+      replyAccessMode: DiscussionSectionReplyAccessMode
+      allowedUserIds: string[]
+    },
+    null
+  >("chat:setDiscussionSectionReplyAccess"),
   joinOpenClub: mutationRef<{ workspaceSlug: string; slug: string }, null>(
     "chat:joinOpenClub"
   ),

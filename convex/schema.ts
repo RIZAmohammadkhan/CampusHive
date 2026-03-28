@@ -25,6 +25,10 @@ const taskStatus = v.union(
 const taskKind = v.union(v.literal("assigned"), v.literal("volunteer"))
 const eventStatus = v.union(v.literal("open"), v.literal("closed"))
 const pollStatus = v.union(v.literal("open"), v.literal("closed"))
+const sectionReplyAccessMode = v.union(
+  v.literal("everyone"),
+  v.literal("selected")
+)
 const notificationKind = v.union(
   v.literal("dm"),
   v.literal("mention"),
@@ -117,6 +121,8 @@ export default defineSchema({
     slug: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
+    replyAccessMode: v.optional(sectionReplyAccessMode),
+    allowedReplyUserIds: v.optional(v.array(v.id("users"))),
     position: v.number(),
     createdAt: v.number(),
     createdByUserId: v.optional(v.id("users")),
