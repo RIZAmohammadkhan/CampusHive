@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Allow: /sign-in
+Allow: /sign-up
+
+# Block protected app routes and verification pages
+Disallow: /w/
+Disallow: /verify/
+Disallow: /invite-needed/
+
+# Point to the sitemap
+Sitemap: https://campus-hive-chi.vercel.app/sitemap.xml
